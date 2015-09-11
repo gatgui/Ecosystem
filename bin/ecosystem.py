@@ -303,21 +303,35 @@ class Environment:
 
         # reads all of the found .env files, parses the tool name and version and checked that against our want list
         possible_tools = [Tool(file_name) for file_name in glob.glob(self.environment_files)]
-        for new_tool in possible_tools:
-            if new_tool.platform_supported:
-                tool_name = new_tool.tool + new_tool.version if new_tool.version != '' else new_tool.tool
-                if tool_name in self.wants:
-                    if new_tool.tool in self.tools:
-                        print 'Duplicate tool specified: \
-                               {0} using {1}{2}'.format(new_tool.tool, new_tool.tool, new_tool.version)
-                    self.tools[new_tool.tool] = new_tool
-                    self.wants.remove(tool_name)
-                if new_tool.tool in self.wants:
-                    self.wants.remove(new_tool.tool)
-                    if new_tool.requirements:
-                        for required_tool in new_tool.requirements:
-                            if required_tool not in self.tools:
-                                self.wants = self.wants | set(list(required_tool))
+
+        versioned_tools = {}
+        for t in possible_tools:
+            if t.version == '':
+                continue
+            versioned_tools[t.tool + t.version] = t
+
+        wants_added = True
+        while wants_added:
+            wants_added = False
+            for new_tool in possible_tools:
+                if new_tool.platform_supported:
+                    tool_name = new_tool.tool + new_tool.version
+                    if tool_name in self.wants or new_tool.tool in self.wants:
+                        if new_tool.tool in self.tools and self.tools[new_tool.tool].version != new_tool.version:
+                            print 'Duplicate tool specified: \
+                                   {0} using {1}{2}'.format(new_tool.tool, new_tool.tool, new_tool.version)
+                        self.tools[new_tool.tool] = new_tool
+                        if tool_name in self.wants:
+                            self.wants.remove(tool_name)
+                        if new_tool.tool in self.wants:
+                            self.wants.remove(new_tool.tool)
+                        if new_tool.requirements:
+                            for required_tool in new_tool.requirements:
+                                t = versioned_tools.get(required_tool, None)
+                                if (required_tool if t is None else t.tool) not in self.tools:
+                                    if not required_tool in self.wants:
+                                        wants_added = True
+                                    self.wants.add(required_tool)
 
         if len(self.wants) != 0:
             missing_tools = ', '.join(self.wants)
