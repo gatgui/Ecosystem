@@ -286,6 +286,40 @@ class Tool:
     #     return False
 
 
+def list_tools(verbose=False):
+    environment_files = []
+    environment_file_names = set()
+    environment_locations = os.getenv('ECO_ENV')
+
+    if environment_locations:
+        for environment_location in environment_locations.split(os.pathsep):
+            if verbose:
+                print("Process directory \"%s\"" % environment_location)
+            for environment_file in glob.glob(environment_location + "/*.env"):
+                if verbose:
+                    print("  Process file \"%s\"" % environment_file)
+                file_name = os.path.basename(environment_file)
+                ignore = (file_name in environment_file_names)
+                if not ignore:
+                    if sys.platform == "win32":
+                        ignore = (file_name.lower() in environment_file_names)
+                    if not ignore:
+                        environment_file_names.add(file_name)
+                        environment_files.append(environment_file)
+                    else:
+                        if verbose:
+                            print("    Already processed")
+                else:
+                    if verbose:
+                        print("    Already processed")
+
+    return [Tool(file_path) for file_path in environment_files]
+
+
+def list_available_tools(verbose=False):
+    return sorted([t.tool + t.version for t in list_tools(verbose)])
+
+
 class Environment:
     """Once initialized this will represent the environment defined by the wanted tools"""
     def __init__(self, wants, environment_directory=None, force=False):
@@ -295,14 +329,7 @@ class Environment:
         self.success = True
         self.force = force
 
-        self.environment_files = '*.env'
-
-        environment_location = os.getenv('ECO_ENV')
-        if environment_location:
-            self.environment_files = environment_location + '/*.env'
-
-        # reads all of the found .env files, parses the tool name and version and checked that against our want list
-        possible_tools = [Tool(file_name) for file_name in glob.glob(self.environment_files)]
+        possible_tools = list_tools()
 
         versioned_tools = {}
         for t in possible_tools:
@@ -415,28 +442,6 @@ class Environment:
                 os.environ[env_name] = os.path.expandvars(env_value)
             for env_name, env_value in os.environ.items():
                 os.environ[env_name] = os.path.expandvars(env_value)
-
-
-def list_available_tools():
-    environment_files = '*.env'
-
-    environment_location = os.getenv('ECO_ENV')
-    if environment_location:
-        environment_files = environment_location + '/*.env'
-
-    # reads all of the found .env files, parses the tool name and version and checked that against our wan list
-    tool_list = []
-    possible_tools = glob.glob(environment_files)
-    for file_name in possible_tools:
-        new_tool = Tool(file_name)
-        if new_tool.platform_supported:
-            tool_name = new_tool.tool
-            if new_tool.version != '':
-                tool_name = tool_name + new_tool.version
-            if tool_name not in tool_list:
-                tool_list.append(tool_name)
-                    
-    return sorted(tool_list)
 
 
 def call_process(arguments):
