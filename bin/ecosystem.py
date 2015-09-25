@@ -527,7 +527,7 @@ Example:
             env = Environment(tools)
             if env.success:
                 env.get_env(os.environ)
-                call_process([run_application])
+                call_process(run_application)
 
         elif set_environment:
             env = Environment(tools)
