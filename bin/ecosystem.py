@@ -151,7 +151,8 @@ if platform.system().lower() == 'windows':
     MAKE_COMMAND = ['jom']
     CLEAN_COMMAND = ['jom', 'clean']
     MAKE_TARGET = 'NMake Makefiles'
-
+ECO_SHELL = os.environ.get("ECO_SHELL", "csh")
+ENV_REF_EXP = re.compile(r"\$\{([^}]*)\}")
 
 class ValueWrapper:
     """Wraps a value to be held by a Variable"""
@@ -395,13 +396,24 @@ class Environment:
                     if dependency in self.variables:
                         self.get_var(self.variables[dependency])
                 var_value = var.get_env()
-                self.value = self.value + 'setenv ' + var.name + ' ' + var_value
+                if platform.system().lower() == 'windows':
+                    self.value = self.value + 'set ' + var.name + '=' + ENV_REF_EXP.sub(r"%\1%", var_value)
+                elif ECO_SHELL == 'csh':
+                    self.value = self.value + 'setenv ' + var.name + ' ' + var_value
+                else:
+                    self.value = self.value + var.name + '=' + ENV_REF_EXP.sub(r"$\1", var_value)
                 if os.getenv(var.name):
                     if not self.force and not var.strict:
-                        if var_value == '':
-                            self.value = self.value + '${' + var.name + '}'
+                        if platform.system().lower() == 'windows':
+                            var_ref = '%' + var.name + '%'
+                        elif ECO_SHELL == 'csh':
+                            var_ref = '${' + var.name + '}'
                         else:
-                            self.value = self.value + os.pathsep + '${' + var.name + '}'
+                            var_ref = '$' + var.name
+                        if var_value == '':
+                            self.value = self.value + var_ref
+                        else:
+                            self.value = self.value + os.pathsep + var_ref
                 self.value = self.value + '\n'
                 self.defined_variables.append(var.name)
 
@@ -425,7 +437,7 @@ class Environment:
         # combine all of the variable in all the tools based on a dependency list
         if self.success:
             self.defined_variables = []
-            self.value = '#Environment created via Ecosystem\n'
+            self.value = '# Environment created via Ecosystem\n'
 
             for var_name, variable in self.variables.items():
                 if self.variables[var_name].has_value():

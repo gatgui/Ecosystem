@@ -1,0 +1,2 @@
+#!/usr/bin/env sh
+python `dirname $0`/ecosystem.py --setenv --tools "$@" > /tmp/ecoset; source /tmp/ecoset
