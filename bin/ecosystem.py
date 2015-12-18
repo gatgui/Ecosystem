@@ -248,6 +248,7 @@ class Tool:
             print 'Unable to find file {0} ...'.format(filename)
 
         if self.in_dictionary:
+            self.path = os.path.abspath(os.path.dirname(filename)).replace("\\", "/")
             self.tool = self.in_dictionary['tool']
             self.version = self.in_dictionary['version']
             self.platforms = self.in_dictionary['platforms']
@@ -259,7 +260,7 @@ class Tool:
         return platform.system().lower() in self.platforms if self.platforms else False
 
     def substitute_at(self, value):
-        return value.replace("@tool", self.tool).replace("@version", self.version)
+        return value.replace("@path", self.path).replace("@tool", self.tool).replace("@version", self.version)
 
     def get_vars(self, env):
         for name, value in self.in_dictionary['environment'].items():
