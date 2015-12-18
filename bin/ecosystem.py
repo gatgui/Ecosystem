@@ -258,11 +258,14 @@ class Tool:
         """Check to see if the tool is supported on the current platform"""
         return platform.system().lower() in self.platforms if self.platforms else False
 
+    def substitute_at(self, value):
+        return value.replace("@tool", self.tool).replace("@version", self.version)
+
     def get_vars(self, env):
         for name, value in self.in_dictionary['environment'].items():
             if name not in env.variables:
                 env.variables[name] = Variable(name)
-            env.variables[name].append_value(value)
+            env.variables[name].append_value(self.substitute_at(value))
 
         # check for optional parameters
         if 'optional' in self.in_dictionary:
@@ -271,20 +274,7 @@ class Tool:
                     for name, value in optional_value.items():
                         if name not in env.variables:
                             env.variables[name] = Variable(name)
-                        env.variables[name].append_value(value)
-                
-    """Check to see if the tool is supported on the current platform"""
-    def plaformSupported(self):
-        if (self.platforms):
-            if (platform.system().lower() in self.platforms):
-                return True
-        return False
-    
-    # """Checks to see if this tool defines the given variables"""
-    # def definesVariable(self, var):
-    #     if var in self.variables:
-    #         return True
-    #     return False
+                        env.variables[name].append_value(self.substitute_at(value))
 
 
 def list_tools(verbose=False):
