@@ -235,6 +235,9 @@ class Variable:
 
 class Tool:
     """Defines a tool - more specifically, a version of a tool"""
+    
+    at_exp = re.compile(r"@(abspath|tool|version|path)")
+    at_arg_exp = re.compile(r"^\((.*)\)")
 
     def __init__(self, filename):
         try:
@@ -256,7 +259,44 @@ class Tool:
         return platform.system().lower() in self.platforms if self.platforms else False
 
     def substitute_at(self, value):
-        return value.replace("@path", self.path).replace("@tool", self.tool).replace("@version", self.version)
+        result = ""
+        remain = value
+        
+        m = self.at_exp.search(remain)
+        
+        while m is not None:
+            result += remain[:m.start()]
+            
+            tgt = m.group(1)
+            
+            if tgt == "tool":
+                result += self.tool
+            
+            elif tgt == "version":
+                result += self.version
+            
+            elif tgt == "path":
+                result += self.path
+            
+            elif tgt == "abspath":
+                remain = remain[m.end():]
+                m = self.at_arg_exp.match(remain)
+                if not m:
+                    print("Invalid @abspath call in '%s'" % value)
+                    return value
+                
+                result += os.path.abspath(self.substitute_at(m.group(1))).replace("\\", "/")
+            
+            else:
+                print("Invalid @ value '%s' in '%s'" % (tgt, value))
+                return value
+            
+            remain = remain[m.end():]
+            m = self.at_exp.search(remain)
+        
+        result += remain
+        
+        return result
 
     def get_vars(self, env):
         for name, value in self.in_dictionary['environment'].items():
