@@ -163,8 +163,19 @@ class ValueWrapper:
     @property
     def value(self):
         if isinstance(self._value, dict):
-            return self._value.get(self._current_os, None) or self._value.get('common', None)
-        return self._value
+            v1 = self._value.get(self._current_os, None)
+            if v1:
+                v2 = self._value.get("common", None)
+                if v2:
+                    v1 = ([v1] if not isinstance(v1, list) else v1)
+                    v2 = ([v2] if not isinstance(v2, list) else v2)
+                    return v1 + filter(lambda x: x not in v1, v2)
+                else:
+                    return v1
+            else:
+                return self._value.get("common", None)
+        else:
+            return self._value
 
     @property
     def strict_value(self):
@@ -203,9 +214,8 @@ class Variable:
         return []
 
     def substitute_at(self, value, **subst_keys):
-        if value is not None:
-            for k, v in subst_keys.iteritems():
-                value = value.replace("@"+k, v)
+        for k, v in subst_keys.iteritems():
+            value = value.replace("@"+k, v)
         return value
     
     def append_value(self, value, **subst_keys):
@@ -214,12 +224,17 @@ class Variable:
         self.strict = value_wrapper.strict_value
         if self.strict is False:
             self.absolute = value_wrapper.absolute_value
-        value = self.substitute_at(value_wrapper.value, **subst_keys)
-        if value not in self.values and value is not None:
-            self.values += [value]
-            for var_dependency in self.list_dependencies(value):
-                if not var_dependency in self.dependencies:
-                    self.dependencies.append(var_dependency)
+        v = value_wrapper.value
+        if v is None:
+            return
+        vl = ([v] if not isinstance(v, list) else v)
+        for v in vl:
+            v = self.substitute_at(v, **subst_keys)
+            if v not in self.values:
+                self.values.append(v)
+                for var_dependency in self.list_dependencies(v):
+                    if not var_dependency in self.dependencies:
+                        self.dependencies.append(var_dependency)
 
     def has_value(self):
         if len(self.values) > 0:
