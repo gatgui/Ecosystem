@@ -227,7 +227,7 @@ class Variable:
             if count != 0:
                 value = value + os.pathsep
             if self.absolute:
-                var_value = os.path.abspath(var_value)
+                var_value = os.path.abspath(var_value).replace("\\", "/")
             value = value + var_value
             count += 1
         return value
