@@ -198,8 +198,8 @@ class Variable:
         self.dependents = []
         self.values = []
         self.dependencies = []
-        self.strict = False
-        self.absolute = False
+        self.strict = False    # Do not inherit existing environment
+        self.absolute = False  # Make path absolute
 
     def list_dependencies(self, value):
         """Checks the value to see if it has any dependency on other Variables, returning them in a list"""
@@ -221,8 +221,14 @@ class Variable:
     def append_value(self, value, **subst_keys):
         """Sets and/or appends a value to the Variable"""
         value_wrapper = ValueWrapper(value)
-        self.strict = value_wrapper.strict_value
-        if self.strict is False:
+        # Strict and absolute merge logic:
+        #   If any of the appended value is strict, all are strict
+        #   If any of the appended value is absolute, all are absolute, unless variable is also strict
+        if not self.strict:
+            self.strict = value_wrapper.strict_value
+            if self.strict:
+                self.absolute = False
+        if not self.strict and not self.absolute:
             self.absolute = value_wrapper.absolute_value
         v = value_wrapper.value
         if v is None:
@@ -247,7 +253,8 @@ class Variable:
         for var_value in self.values:
             if count != 0:
                 value = value + os.pathsep
-            if self.absolute:
+            # Do not make path absolute if it starts with a environment variable reference
+            if self.absolute and not var_value.startswith("${"):
                 var_value = os.path.abspath(var_value).replace("\\", "/")
             value = value + var_value
             count += 1
