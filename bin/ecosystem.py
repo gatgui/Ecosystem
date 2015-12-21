@@ -153,8 +153,7 @@ ENV_REF_EXP = re.compile(r"\$\{([^}]*)\}")
 class ValueWrapper:
     """Wraps a value to be held by a Variable"""
 
-    def __init__(self,
-                 value=None):
+    def __init__(self, value=None):
         self._value = value
 
     @property
@@ -203,15 +202,22 @@ class Variable:
             pass
         return []
 
-    def append_value(self, value):
+    def substitute_at(self, value, **subst_keys):
+        if value is not None:
+            for k, v in subst_keys.iteritems():
+                value = value.replace("@"+k, v)
+        return value
+    
+    def append_value(self, value, **subst_keys):
         """Sets and/or appends a value to the Variable"""
         value_wrapper = ValueWrapper(value)
         self.strict = value_wrapper.strict_value
         if self.strict is False:
             self.absolute = value_wrapper.absolute_value
-        if value_wrapper.value not in self.values and value_wrapper.value is not None:
-            self.values += [value_wrapper.value]
-            for var_dependency in self.list_dependencies(value_wrapper.value):
+        value = self.substitute_at(value_wrapper.value, **subst_keys)
+        if value not in self.values and value is not None:
+            self.values += [value]
+            for var_dependency in self.list_dependencies(value):
                 if not var_dependency in self.dependencies:
                     self.dependencies.append(var_dependency)
 
@@ -227,7 +233,7 @@ class Variable:
             if count != 0:
                 value = value + os.pathsep
             if self.absolute:
-                var_value = os.path.abspath(var_value)
+                var_value = os.path.abspath(var_value).replace("\\", "/")
             value = value + var_value
             count += 1
         return value
@@ -236,9 +242,6 @@ class Variable:
 class Tool:
     """Defines a tool - more specifically, a version of a tool"""
     
-    at_exp = re.compile(r"@(abspath|tool|version|path)")
-    at_arg_exp = re.compile(r"^\((.*)\)")
-
     def __init__(self, filename):
         try:
             with open(filename, 'r') as f:
@@ -257,52 +260,12 @@ class Tool:
     def platform_supported(self):
         """Check to see if the tool is supported on the current platform"""
         return platform.system().lower() in self.platforms if self.platforms else False
-
-    def substitute_at(self, value):
-        result = ""
-        remain = value
-        
-        m = self.at_exp.search(remain)
-        
-        while m is not None:
-            result += remain[:m.start()]
-            
-            tgt = m.group(1)
-            
-            if tgt == "tool":
-                result += self.tool
-            
-            elif tgt == "version":
-                result += self.version
-            
-            elif tgt == "path":
-                result += self.path
-            
-            elif tgt == "abspath":
-                remain = remain[m.end():]
-                m = self.at_arg_exp.match(remain)
-                if not m:
-                    print("Invalid @abspath call in '%s'" % value)
-                    return value
-                
-                result += os.path.abspath(self.substitute_at(m.group(1))).replace("\\", "/")
-            
-            else:
-                print("Invalid @ value '%s' in '%s'" % (tgt, value))
-                return value
-            
-            remain = remain[m.end():]
-            m = self.at_exp.search(remain)
-        
-        result += remain
-        
-        return result
-
+    
     def get_vars(self, env):
         for name, value in self.in_dictionary['environment'].items():
             if name not in env.variables:
                 env.variables[name] = Variable(name)
-            env.variables[name].append_value(self.substitute_at(value))
+            env.variables[name].append_value(value, path=self.path, tool=self.tool, version=self.version)
 
         # check for optional parameters
         if 'optional' in self.in_dictionary:
@@ -311,7 +274,7 @@ class Tool:
                     for name, value in optional_value.items():
                         if name not in env.variables:
                             env.variables[name] = Variable(name)
-                        env.variables[name].append_value(self.substitute_at(value))
+                        env.variables[name].append_value(value, path=self.path, tool=self.tool, version=self.version)
 
 
 def list_tools(verbose=False):
