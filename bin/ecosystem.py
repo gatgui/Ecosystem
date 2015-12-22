@@ -150,10 +150,11 @@ if platform.system().lower() == 'windows':
 ECO_SHELL = os.environ.get("ECO_SHELL", "csh")
 ENV_REF_EXP = re.compile(r"\$\{([^}]*)\}")
 
-class ValueWrapper:
+class ValueWrapper(object):
     """Wraps a value to be held by a Variable"""
 
     def __init__(self, value=None):
+        super(ValueWrapper, self).__init__()
         self._value = value
 
     @property
@@ -189,10 +190,16 @@ class ValueWrapper:
         return False
 
 
-class Variable:
+class ValueExpr(ValueWrapper):
+    def __init__(self, value=None):
+        super(ValueExpr, self).__init__(value=value)
+
+
+class Variable(object):
     """Defines a variable required by a tool"""
 
     def __init__(self, name):
+        super(Variable, self).__init__()
         self.name = name
         self.dependency_re = None
         self.dependents = []
@@ -220,7 +227,13 @@ class Variable:
     
     def append_value(self, value, **subst_keys):
         """Sets and/or appends a value to the Variable"""
-        value_wrapper = ValueWrapper(value)
+        is_expr = False
+        if isinstance(value, ValueExpr):
+            # ValueExpr is already a value wrapper
+            value_wrapper = value
+            is_expr = True
+        else:
+            value_wrapper = ValueWrapper(value)
         # Strict and absolute merge logic:
         #   If any of the appended value is strict, all are strict
         #   If any of the appended value is absolute, all are absolute, unless variable is also strict
@@ -236,11 +249,24 @@ class Variable:
         vl = ([v] if not isinstance(v, list) else v)
         for v in vl:
             v = self.substitute_at(v, **subst_keys)
-            if v not in self.values:
-                self.values.append(v)
-                for var_dependency in self.list_dependencies(v):
-                    if not var_dependency in self.dependencies:
-                        self.dependencies.append(var_dependency)
+            if is_expr:
+                try:
+                    ev = eval(v)
+                    if not isinstance(ev, list):
+                        ev = [str(ev)]
+                    else:
+                        ev = map(str, ev)
+                except Exception, e:
+                    print("Failed to evaluate value expression: %s" % v)
+                    continue
+            else:
+                ev = [v]
+            for v in ev:
+                if v not in self.values:
+                    self.values.append(v)
+                    for var_dependency in self.list_dependencies(v):
+                        if not var_dependency in self.dependencies:
+                            self.dependencies.append(var_dependency)
 
     def has_value(self):
         if len(self.values) > 0:
@@ -261,13 +287,14 @@ class Variable:
         return value
 
 
-class Tool:
+class Tool(object):
     """Defines a tool - more specifically, a version of a tool"""
     
     def __init__(self, filename):
+        super(Tool, self).__init__()
         try:
             with open(filename, 'r') as f:
-                self.in_dictionary = eval(f.read())
+                self.in_dictionary = eval(f.read(), globals(), {"eval": ValueExpr})
         except IOError:
             print 'Unable to find file {0} ...'.format(filename)
 
@@ -333,9 +360,10 @@ def list_available_tools(verbose=False):
     return sorted([t.tool + t.version for t in list_tools(verbose)])
 
 
-class Environment:
+class Environment(object):
     """Once initialized this will represent the environment defined by the wanted tools"""
     def __init__(self, wants, environment_directory=None, force=False):
+        super(Environment, self).__init__()
         self.tools = {}
         self.variables = {}
         self.wants = set(wants)         # make sure the set has unique values
