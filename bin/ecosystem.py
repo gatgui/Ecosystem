@@ -248,8 +248,9 @@ class Variable(object):
             return
         vl = ([v] if not isinstance(v, list) else v)
         for v in vl:
-            v = self.substitute_at(v, **subst_keys)
-            if is_expr:
+            _is_expr = isinstance(v, ValueExpr)
+            v = self.substitute_at(v.value if _is_expr else v, **subst_keys)
+            if is_expr or _is_expr:
                 try:
                     ev = eval(v)
                     if not isinstance(ev, list):
