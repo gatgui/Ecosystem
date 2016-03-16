@@ -282,7 +282,9 @@ class Variable(object):
                 value = value + os.pathsep
             # Do not make path absolute if it starts with a environment variable reference
             if self.absolute and not var_value.startswith("${"):
-                var_value = os.path.abspath(var_value).replace("\\", "/")
+                pathpat = os.path.abspath(ENV_REF_EXP.sub("*", var_value)).replace("\\", "/")
+                if len(glob.glob(pathpat)) > 0:
+                    var_value = os.path.abspath(var_value)
             value = value + var_value
             count += 1
         return value
