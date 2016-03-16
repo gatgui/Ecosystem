@@ -284,7 +284,7 @@ class Variable(object):
             if self.absolute and not var_value.startswith("${"):
                 pathpat = os.path.abspath(ENV_REF_EXP.sub("*", var_value)).replace("\\", "/")
                 if len(glob.glob(pathpat)) > 0:
-                    var_value = os.path.abspath(var_value)
+                    var_value = os.path.abspath(var_value).replace("\\", "/")
             value = value + var_value
             count += 1
         return value
