@@ -236,12 +236,10 @@ class Variable(object):
             value_wrapper = ValueWrapper(value)
         # Strict and absolute merge logic:
         #   If any of the appended value is strict, all are strict
-        #   If any of the appended value is absolute, all are absolute, unless variable is also strict
+        #   If any of the appended value is absolute, all are absolute
         if not self.strict:
             self.strict = value_wrapper.strict_value
-            if self.strict:
-                self.absolute = False
-        if not self.strict and not self.absolute:
+        if not self.absolute:
             self.absolute = value_wrapper.absolute_value
         v = value_wrapper.value
         if v is None:
