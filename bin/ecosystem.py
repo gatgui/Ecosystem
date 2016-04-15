@@ -498,7 +498,7 @@ class Environment(object):
 
 
 def call_process(arguments):
-    if platform.system().lower() == 'windows':
+    if type(arguments) in (unicode, str):
         subprocess.call(arguments, shell=True)
     else:
         subprocess.call(arguments)
@@ -507,6 +507,26 @@ def call_process(arguments):
 def main(argv=None):
     if argv is None:
         argv = sys.argv[1:]
+
+    # Don't rely on argparse to retrieve the command to and its arguments
+    #   (while it as a nargs='+' option for an argument, it stills insist on
+    #    interpreting the arguments collected as if it were its own arguments...)
+    # Any arguments after the -r/--run flag will be considered as part of the command to run
+    # This allows use of commands arguments and flags without having the need to double quote them:
+    #   eco -t maya2014 -r maya -command "print(\"hello\\n\")"
+    # instead of:
+    #   eco -t fx_maya -r "maya -command \"print(\\\"hello\\\\n\\\");\""
+    run_application = None
+    
+    idx = (argv.index("-r") if "-r" in argv else (argv.index("--run") if "--run" in argv else None))
+    if idx is not None:
+        run_application = argv[idx+1:]
+        nargs = len(run_application)
+        if nargs == 0:
+            run_application = None
+        elif nargs == 1:
+            run_application = run_application[0]
+        argv = argv[:idx]
 
     # parse the (command line) arguments; python 2.7+ (or download argparse)
     import argparse
@@ -530,8 +550,6 @@ Example:
                         help='force the full CMake cache to be rebuilt')
     parser.add_argument('-m', '--make', action='store_true',
                         help='just run make')
-    parser.add_argument('-r', '--run', type=str, default=None,
-                        help='run an application')
     parser.add_argument('-s', '--setenv', action='store_true',
                         help='output setenv statements to be used to set the shells environment')
 
@@ -543,7 +561,6 @@ Example:
         return 0
 
     tools = args.tools.split(',') if args.tools is not None else []
-    run_application = args.run
     set_environment = args.setenv
     force_rebuild = args.force
     quick_build = args.make
