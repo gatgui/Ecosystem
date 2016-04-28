@@ -305,7 +305,7 @@ class Version(object):
                 self.maj = spl[-3]
                 self.extra = spl[:-3]
         else:
-            self.value = None
+            self.value = ""
             self.semantic = False
             self.maj = -1
             self.min = -1
@@ -493,6 +493,9 @@ class Requirement(object):
     def is_flexible(self):
         return (self.is_valid() and self.fix is None)
     
+    def is_free(self):
+        return (self.is_valid() and self.fix is None and self.upper is None and self.lower is None)
+    
     def clone(self):
         r = Requirement()
         r.name = self.name
@@ -607,7 +610,7 @@ class Tool(object):
         for name, value in self.in_dictionary['environment'].items():
             if name not in env.variables:
                 env.variables[name] = Variable(name)
-            env.variables[name].append_value(value, path=self.path, platform=platform.system().lower(), tool=self.tool, version=self.version.value)
+            env.variables[name].append_value(value, path=self.path, platform=platform.system().lower(), tool=self.tool, version=str(self.version))
         
         # check for optional parameters
         if 'optional' in self.in_dictionary:
@@ -616,7 +619,7 @@ class Tool(object):
                     for name, value in optional_value.items():
                         if name not in env.variables:
                             env.variables[name] = Variable(name)
-                        env.variables[name].append_value(value, path=self.path, platform=platform.system().lower(), tool=self.tool, version=self.version.value)
+                        env.variables[name].append_value(value, path=self.path, platform=platform.system().lower(), tool=self.tool, version=str(self.version))
 
 
 def list_tools(verbose=False):
@@ -650,7 +653,7 @@ def list_tools(verbose=False):
 
 
 def list_available_tools(verbose=False):
-    return sorted([t.tool + t.version for t in list_tools(verbose)])
+    return sorted([t.tool + str(t.version) for t in list_tools(verbose)])
 
 
 class Environment(object):
@@ -670,14 +673,14 @@ class Environment(object):
                 raise Exception("Invalid wants")
             self.wants[req.name] = creq
 
-        possible_tools = list_tools()
+        possible_tools = list_tools(verbose)
         versions = {}  # tool name -> Requirement
 
         versioned_tools = {}
         for t in possible_tools:
             if not t.version.is_valid():
                 continue
-            versioned_tools[t.tool + t.version.value] = t
+            versioned_tools[t.tool + str(t.version)] = t
 
         wants_changed = True
         loop_count = 1
@@ -993,7 +996,7 @@ Example:
     args = parser.parse_args(argv)
 
     if args.listtools:
-        for tool in list_available_tools():
+        for tool in list_available_tools(args.verbose):
             print tool
         return 0
 
