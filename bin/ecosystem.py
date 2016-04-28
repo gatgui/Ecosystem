@@ -442,8 +442,8 @@ class Tool(object):
         for name, value in self.in_dictionary['environment'].items():
             if name not in env.variables:
                 env.variables[name] = Variable(name)
-            env.variables[name].append_value(value, path=self.path, tool=self.tool, version=self.version)
-
+            env.variables[name].append_value(value, path=self.path, platform=platform.system().lower(), tool=self.tool, version=self.version.value)
+        
         # check for optional parameters
         if 'optional' in self.in_dictionary:
             for optional_name, optional_value in self.in_dictionary['optional'].items():
@@ -451,7 +451,7 @@ class Tool(object):
                     for name, value in optional_value.items():
                         if name not in env.variables:
                             env.variables[name] = Variable(name)
-                        env.variables[name].append_value(value, path=self.path, tool=self.tool, version=self.version)
+                        env.variables[name].append_value(value, path=self.path, platform=platform.system().lower(), tool=self.tool, version=self.version.value)
 
 
 def list_tools(verbose=False):
