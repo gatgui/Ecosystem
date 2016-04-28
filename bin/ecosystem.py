@@ -150,6 +150,7 @@ if platform.system().lower() == 'windows':
 ECO_SHELL = os.environ.get("ECO_SHELL", "csh")
 ENV_REF_EXP = re.compile(r"\$\{([^}]*)\}")
 VER_SPLIT_EXP = re.compile(r"^([^\d]+)(\d.*)$")
+SEM_VER_EXP = re.compile(r"(\d+\.){2,}\d+")
 
 
 class ValueWrapper(object):
@@ -290,124 +291,288 @@ class Variable(object):
         return value
 
 
-def parse_requirement(req):
-    # Examples:
-    #   toolname       : any version
-    #   toolname2.4.3  : version 2.4.3
-    #   toolname2.4.3+ : any version >= 2.4.3
-    #   toolname2.4.3- : any version <= 2.4.3
-    
-    name = None
-    version = None
-    restriction = None
-
-    if req.endswith("+"):
-        restriction = 1
-        req = req[:-1]
-    elif req.endswith("-"):
-        restriction = -1
-        req = req[:-1]
-
-    m = VER_SPLIT_EXP.match(req)
-    if m is not None:
-        name = m.group(1)
-        version = m.group(2)
-        if req is None:
-            req = 0
-    else:
-        name = req
-        version = None
-    
-    return (name, version, restriction)
-
-def update_requirement(cur_ver, cur_restriction, new_ver, new_restriction):
-    changed = False
-    
-    cur_sem_ver = parse_semantic_version(cur_ver)
-    new_sem_ver = parse_semantic_version(new_ver)
-    
-    if cur_ver is not None:
-        failed = False
-        
-        if new_ver is None:
-            new_ver = cur_ver
-            new_restriction = cur_restriction
-            changed = True
-        
-        elif new_restriction == 0 or cur_sem_ver is None or new_sem_ver is None:
-            failed = (new_ver != cur_ver)
-        
+class Version(object):
+    def __init__(self, s=None):
+        super(Version, self).__init__()
+        if s is not None:
+            self.value = s
+            m = SEM_VER_EXP.match(self.value)
+            self.semantic = (m is not None)
+            if m is not None:
+                spl = map(int, s.split("."))
+                self.patch = spl[-1]
+                self.min = spl[-2]
+                self.maj = spl[-3]
+                self.extra = spl[:-3]
         else:
-            failed = not is_version_compatible(cur_sem_ver, new_sem_ver)
+            self.value = None
+            self.semantic = False
+            self.maj = -1
+            self.min = -1
+            self.patch = -1
+            self.extra = []
+    
+    def __str__(self):
+        return self.value
+    
+    def __repr__(self):
+        return self.value
+    
+    def __eq__(self, rhs):
+        return (self.value == rhs.value)
+    
+    def __ne__(self, rhs):
+        return (self.value != rhs.value)
+    
+    def __lt__(self, rhs):
+        return self.is_older_than(rhs, inclusive=False)
+    
+    def __le__(self, rhs):
+        return self.is_older_than(rhs, inclusive=True)
+    
+    def __gt__(self, rhs):
+        return self.is_newer_than(rhs, inclusive=False)
+    
+    def __ge__(self, rhs):
+        return self.is_newer_than(rhs, inclusive=True)
+    
+    def is_valid(self):
+        return (self.value is not None)
+    
+    def clone(self):
+        c = Version()
+        c.value = self.value
+        c.semantic = self.semantic
+        c.maj = self.maj
+        c.min = self.min
+        c.patch = self.patch
+        c.extra = self.extra[:]
+        return c
+    
+    def is_newer_than(self, rhs, inclusive=True):
+        if self.semantic and rhs.semantic:
+            if len(self.extra) != len(rhs.extra):
+                return False
+            for i in xrange(len(self.extra)):
+                if self.extra[i] > rhs.extra[i]:
+                    return True
+                elif self.extra[i] < rhs.extra[i]:
+                    return False
+            if self.maj > rhs.maj:
+                return True
+            elif self.maj < rhs.maj:
+                return False
+            if self.min > rhs.min:
+                return True
+            elif self.min < rhs.min:
+                return False
+            if self.patch > rhs.patch:
+                return True
+            elif self.patch < rhs.patch:
+                return False
+            return (True if inclusive else False)
+        else:
+            if inclusive:
+                return (self.value == rhs.value)
+            else:
+                return False
+    
+    def is_older_than(self, rhs, inclusive=True):
+        if self.semantic and rhs.semantic:
+            if len(self.extra) != len(rhs.extra):
+                return False
+            for i in xrange(len(self.extra)):
+                if self.extra[i] < rhs.extra[i]:
+                    return True
+                elif self.extra[i] > rhs.extra[i]:
+                    return False
+            if self.maj < rhs.maj:
+                return True
+            elif self.maj > rhs.maj:
+                return False
+            if self.min < rhs.min:
+                return True
+            elif self.min > rhs.min:
+                return False
+            if self.patch < rhs.patch:
+                return True
+            elif self.patch > rhs.patch:
+                return False
+            return (True if inclusive else False)
+        else:
+            if inclusive:
+                return (self.value == rhs.value)
+            else:
+                return False
+    
+    def is_compatible(self, rhs, forward_only=False):
+        if self.semantic and rhs.semantic:
+            if self.extra == rhs.extra and self.maj == rhs.maj:
+                return (self.min == rhs.min if forward_only else self.min >= rhs.min)
+            else:
+                return False
+        else:
+            return (self.value == rhs.value)
+
+
+class Requirement(object):
+    def __init__(self, s=None):
+        super(Requirement, self).__init__()
+        
+        self.name = None
+        self.fix = None
+        self.upper = None
+        self.upper_strict = False
+        self.lower = None
+        self.lower_strict = False
+        
+        if s is not None:
+            restriction = 0
+            if s.endswith("+"):
+                restriction = 1
+                s = s[:-1]
+            elif s.endswith("-"):
+                restriction = -1
+                s = s[:-1]
             
-            if not failed:
-                if new_restriction == 1:
-                    if is_version_newer_than(cur_sem_ver, new_sem_ver, True) is False:
-                        failed = (cur_restriction != 1)
+            m = SEM_VER_EXP.search(s)
+            
+            if m is not None:
+                if s[m.end(0):]:
+                    raise Exception("Invalid requirement specification: '%s'" % s)
                 
+                self.name = s[:m.start(0)]
+                
+                v = Version(m.group(0))
+                
+                if restriction == 0:
+                    self.fix = v
+                elif restriction == 1:
+                    self.lower = v
                 else:
-                    if is_version_older_than(cur_sem_ver, new_sem_ver, True) is False:
-                        failed = (cur_restriction != -1)
+                    self.upper = v
+            
+            else:
+                if restriction != 0:
+                    raise Exception("Invalid requirement specification: '%s' (+/- only available for semantic versioning)" % s)
                 
-                if not failed:
-                    changed = True
+                m = VER_SPLIT_EXP.match(s)
+                
+                if m is not None:
+                    self.name = self.group(1)
+                    vs = self.group(2)
+                    if vs:
+                        self.fix = Version(vs)
+                else:
+                    self.name = s
+    
+    def __str__(self):
+        s = ""
+        if self.name is not None:
+            if self.fix is not None:
+                s += " %s" % self.fix
+            else:
+                if self.lower is not None:
+                    s += " %s%s" % ((">" if self.lower_strict else ">="), self.lower)
+                if self.upper is not None:
+                    if s:
+                        s += ","
+                    s += " %s%s" % (("<" if self.upper_strict else "<="), self.upper)
+                s = self.name + s
+        return s
+    
+    def is_valid(self):
+        return (self.name is not None)
+    
+    def is_fixed(self):
+        return (self.is_valid() and self.fix is not None)
+    
+    def is_flexible(self):
+        return (self.is_valid() and self.fix is None)
+    
+    def clone(self):
+        r = Requirement()
+        r.name = self.name
+        r.fix = (None if self.fix is None else self.fix.clone())
+        r.upper = (None if self.upper is None else self.upper.clone())
+        r.upper_strict = self.upper_strict
+        r.lower = (None if self.lower is None else self.lower.clone())
+        r.lower_strict = self.lower_strict
+        return r
+    
+    def matches(self, ver, check_compatibility=True):
+        # Only check compatibility if requirement is not a range (?)
+        if self.fix is not None:
+            return (ver == self.fix)
         
-        if failed:
-            raise Exception("Version conflict in requirements")
+        if self.upper is not None:
+            if ver.is_newer_than(self.upper, inclusive=self.upper_strict):
+                return False
+            if self.lower is None and check_compatibility and not self.upper.is_compatible(ver, forward_only=False):
+                #print("[1] %s and %s are not compatible" % (ver, self.upper))
+                return False
+        
+        if self.lower is not None:
+            if ver.is_older_than(self.lower, inclusive=self.lower_strict):
+                return False
+            if self.upper is None and check_compatibility and not ver.is_compatible(self.lower, forward_only=False):
+                #print("[2] %s and %s are not compatible" % (ver, self.lower))
+                return False
+        
+        return True
     
-    return (changed, (new_ver, new_restriction))
-
-def parse_semantic_version(version):
-    try:
-        vl = map(int, version.split("."))
-        if len(vl) >= 3:
-            return vl
-    except:
-        pass
-    
-    return None
-
-# The three following functions may return None which is not the same as False
-    
-def is_version_compatible(sver0, sver1):
-    # Consider last 2 digits to be minor and patch versions (in semantic version meaning)
-    if sver0 is not None and sver1 is not None:
-        if len(sver0) != len(sver1):
-            return False
+    def merge(self, rhs, in_place=False):
+        if rhs.name != self.name:
+            return (False if in_place else None)
+        
+        if self.fix is not None:
+            if rhs.fix is not None and self.fix == rhs.fix:
+                return (True if in_place else self.clone())
+            else:
+                return (False if in_place else None)
+        
         else:
-            return (False if sver0[:-2] != sver1[:-2] else True)
-    else:
-        return None
-
-def is_version_newer_than(sver0, sver1, inclusive=True):
-    if sver0 is not None and sver1 is not None:
-        if len(sver0) != len(sver1):
-            return False
-        else:
-            for i in xrange(len(sver1)):
-                if sver0[i] > sver1[i]:
-                    return True
-                elif sver0[i] < sver1[i]:
-                    return False
-            # Same version
-            return (True if inclusive else False)
-    else:
-        return None
-
-def is_version_older_than(sver0, sver1, inclusive=True):
-    if sver0 is not None and sver1 is not None:
-        if len(sver0) != len(sver1):
-            return False
-        else:
-            for i in xrange(len(sver1)):
-                if sver0[i] < sver1[i]:
-                    return True
-                elif sver0[i] > sver1[i]:
-                    return False
-            # Same version
-            return (True if inclusive else False)
-    else:
-        return None
+            c = (self if in_place else self.clone())
+            
+            if rhs.fix is not None:
+                # does it fall in [lower, upper] range
+                if c.lower is not None and rhs.fix.is_older_than(c.lower, inclusive=c.lower_strict):
+                    return (False if in_place else None)
+                
+                if c.upper is not None and rhs.fix.is_newer_than(c.upper, inclusive=c.upper_strict):
+                    return (False if in_place else None)
+                
+                c.fix = rhs.fix
+                c.lower = None
+                c.lower_strict = False
+                c.upper = None
+                c.upper_strict = False
+            
+            else:
+                lower = c.lower
+                lower_strict = c.lower_strict
+                if lower is None or (rhs.lower is not None and rhs.lower.is_newer_than(lower, inclusive=True)):
+                    lower = rhs.lower
+                    lower_strict = rhs.lower_strict
+                
+                upper = c.upper
+                upper_strict = c.upper_strict
+                if upper is None or (rhs.upper is not None and rhs.upper.is_older_than(upper, inclusive=True)):
+                    upper = rhs.upper
+                    upper_strict = rhs.upper_strict
+                
+                if upper is not None and \
+                   lower is not None and \
+                   (upper.is_older_than(lower, lower_strict) or \
+                    lower.is_newer_than(upper, upper_strict)):
+                    return (False if in_place else None)
+                
+                c.upper = upper
+                c.upper_strict = upper_strict
+                c.lower = lower
+                c.lower_strict = lower_strict
+            
+            return (True if in_place else c)
 
 
 class Tool(object):
@@ -424,14 +589,11 @@ class Tool(object):
         if self.in_dictionary:
             self.path = os.path.abspath(os.path.dirname(filename)).replace("\\", "/")
             self.tool = self.in_dictionary['tool']
-            self.version = self.in_dictionary['version']
+            self.version = Version(self.in_dictionary['version'])
             self.platforms = self.in_dictionary['platforms']
             self.requirements = []
-            
             for req in self.in_dictionary['requires']:
-                self.requirements.append(parse_requirement(req))
-            
-            self.sem_version = parse_semantic_version(self.version)
+                self.requirements.append(Requirement(req))
     
     @property
     def platform_supported(self):
@@ -494,30 +656,48 @@ class Environment(object):
         super(Environment, self).__init__()
         self.tools = {}  # tool name -> (tool object, reference count)
         self.variables = {}
-        self.wants = {}  # tool name -> (tool version, version restriction)
+        self.wants = {}  # tool name -> Requirement
         self.success = True
         self.force = force
 
         for want in wants:
-            tool, version, restriction = parse_requirement(want)
-            self.wants[tool] = (version, restriction)
+            req = Requirement(want)
+            creq = self.wants.get(req.name, req)
+            if creq != req and not creq.merge(req, in_place=True):
+                raise Exception("Invalid wants")
+            self.wants[req.name] = creq
 
         possible_tools = list_tools()
-        versions = {}  # tool name -> (tool version, version restriction)
+        versions = {}  # tool name -> Requirement
 
         versioned_tools = {}
         for t in possible_tools:
-            if t.version == '':
+            if not t.version.is_valid():
                 continue
-            versioned_tools[t.tool + t.version] = t
+            versioned_tools[t.tool + t.version.value] = t
 
         wants_changed = True
         loop_count = 1
         
+        
+        # Local helper function
+        def unref_dependencies(tool):
+            for dependency in tool.requirements:
+                to, rc = self.tools.get(dependency.name, (None, 0))
+                if to is not None:
+                    rc -= 1
+                    if rc == 0:
+                        if verbose:
+                            sys.stderr.write("Remove tool requirement: %s\n" % dependency.name)
+                        unref_dependencies(to)
+                        del(self.tools[dependency.name])
+        
+        
         while wants_changed:
-            sys.stderr.write("=== Loop existing tools %d\n" % loop_count)
-            sys.stderr.write("=> Resolved so far: %s\n" % versions)
-            sys.stderr.write("=> Wanted list: %s\n" % self.wants)
+            if verbose:
+                sys.stderr.write("=== Loop existing tools %d\n" % loop_count)
+                sys.stderr.write("=> Resolved so far: %s\n" % versions)
+                sys.stderr.write("=> Wanted list: %s\n" % self.wants)
             loop_count += 1
             
             wants_changed = False
@@ -527,179 +707,119 @@ class Environment(object):
                     # Check if tool is wanted
                     if new_tool.tool in self.wants:
                         # Check if new_tool matches requirements
-                        wanted_ver, wanted_res = self.wants[new_tool.tool]
-                        
-                        if wanted_res is not None:
-                            skip = False
-                            
-                            if wanted_res == 0:
-                                skip = (wanted_ver != new_tool.version)
-                            
-                            else:
-                                wanted_sem_ver = parse_semantic_version(wanted_ver)
-                                
-                                if wanted_sem_ver is not None:
-                                    if is_version_compatible(new_tool.sem_version, wanted_sem_ver) is False:
-                                        skip = True
-                                    elif wanted_res == 1 and is_version_newer_than(new_tool.sem_version, wanted_sem_ver, True) is False:
-                                        skip = True
-                                    elif wanted_res == -1 and is_version_older_than(new_tool.sem_version, wanted_sem_ver, True) is False:
-                                        skip = True
-                                
-                            if skip:
-                                sys.stderr.write("Skip %s %s: doesn't match requirements\n" % (new_tool.tool, new_tool.version))
-                                continue
+                        # Note: wants requirements includes current environment requirements
+                        req = self.wants[new_tool.tool]
+                        if not req.matches(new_tool.version):
+                            if verbose:
+                                sys.stderr.write("Skip %s %s: doesn't match requirements: %s\n" % (new_tool.tool, new_tool.version, req))
+                            continue
                         
                         # Check against current environment version
-                        cur_tool, ref_cnt = self.tools.get(new_tool.tool, (None, 0))
+                        cur_tool, ref_cnt = self.tools.get(new_tool.tool, (None, 1))
                         
-                        cur_ver, cur_res = versions.get(new_tool.tool, (None, None))
+                        # cur_tool.version
+                        cur_req = versions.get(new_tool.tool, None)
                         
                         if cur_tool is not None:
                             # Tool was already required, check if version requirement matches
                             if cur_tool.version != new_tool.version:
-                                sys.stderr.write("%s already required: %s [%s]\n" % (cur_tool.tool, cur_tool.version, cur_res))
+                                if verbose:
+                                    sys.stderr.write("%s already required: %s\n" % (cur_tool.tool, cur_tool.version))
                                 
-                                conflict = False
-                                
-                                if cur_res is not None:
-                                    if cur_tool.sem_version is None or cur_res == 0:
-                                        conflict = True
-                                        op = "!="
-                                    
-                                    # is_version_compatible?
-                                    elif (cur_res ==  1 and is_version_newer_than(new_tool.sem_version, cur_tool.sem_version, True) is False) or \
-                                         (cur_res == -1 and is_version_older_than(new_tool.sem_version, cur_tool.sem_version, True) is False):
-                                        
-                                        #conflict = True
-                                        #p = ("!=" if res == 0 else (">" if res == -1 else "<"))
-                                        sys.stderr.write("Skip %s %s: doesn't match requirements\n" % (new_tool.tool, new_tool.version))
-                                        continue
-                                
-                                else:
-                                    if is_version_newer_than(new_tool.sem_version, cur_tool.sem_version, True) is False:
-                                        sys.stderr.write("Ignore older tool version: %s %s\n" % (new_tool.tool, new_tool.version))
-                                        continue
-                                
-                                if conflict:
+                                if cur_req is not None and not cur_req.matches(new_tool.version):
                                     raise Exception("Version conflict for tool: %s %s %s %s" % (new_tool.tool, new_tool.version, op, cur_tool.version))
                                 
-                                else:
+                                # TODO: don't update for older version of tool?
+                                # if new_tool.version.is_older_than(cur_tool.version, inclusive=False):
+                                #     continue
+                                if verbose:
                                     sys.stderr.write("Update tool version: %s %s -> %s\n" % (new_tool.tool, cur_tool.version, new_tool.version))
-                                    # wanted_res
-                                    cur_res = (None if new_tool.version != wanted_ver else wanted_res)
-                                
+                            
                             else:
                                 # Same tool, same version, nothing specific to do
                                 continue
+                        
+                        dependencies_conflict = False
+                        dependencies_change_wants = False
+                        dependencies_reqs = {}
+                        conflict_message = ""
+                        
+                        # Loop though tool additional requirements
+                        for dependency in new_tool.requirements:
+                            # Merge wants requirements
+                            if dependency.name in self.wants:
+                                new_req = self.wants[dependency.name].merge(dependency)
+                                if new_req is None:
+                                    # Check if dependency.name in self.tools?
+                                    dependencies_conflict = True
+                                    conflict_message = "Skip tool because of requirements conflict: '%s' / '%s'" % (self.wants[dependency.name], dependency)
+                                    break
+                            else:
+                                dependencies_change_wants = True
+                                new_req = dependency.clone()
                             
+                            # Check against current environment
+                            if dependency.name in self.tools:
+                                dreq = versions[dependency.name]
+                                
+                                if not new_req.merge(dreq, in_place=True):
+                                    dependencies_conflict = True
+                                    conflict_message = "Skip tool because of environment conflict: '%s' / '%s'" % (new_req, dreq)
+                                    break
+                            
+                            dependencies_reqs[dependency.name] = new_req
+                        
+                        # Skip tool if dependencies cannot be satisfied
+                        if dependencies_conflict:
+                            if verbose:
+                                sys.stderr.write("%s\n" % conflict_message)
+                            continue
+                        else:
+                            wants_changed = dependencies_change_wants
+                        
+                        # Loop through dependencies a second time to increments references and update wanted list
+                        for dependency in new_tool.requirements:
+                            if dependency.name in self.tools:
+                                tool, refcnt = self.tools[dependency.name]
+                                self.tools[dependency.name] = (tool, refcnt + 1)
+                            
+                            self.wants[dependency.name] = dependencies_reqs[dependency.name]
+                        
+                        
+                        if verbose:
+                            sys.stderr.write("Add tool: %s %s\n" % (new_tool.tool, new_tool.version))
+                        
+                        
+                        if cur_tool is not None and cur_tool.version != new_tool.version:
                             # We're replacing cur_tool with new_tool, as such we should remove all its requirements too
                             # Note that other tools may have the same requirements so that requirements should
                             #   be reference counted and removed only when no other tool require them
-                            for req_name, req_ver, req_res in cur_tool.requirements:
-                                to, rc = self.tools.get(req_name, (None, 1))
-                                if to is not None:
-                                    rc -= 1
-                                    if rc == 0:
-                                        sys.stderr.write("Remove tool requirement: %s\n" % req_name)
-                                        del(self.tools[req_name])
+                            unref_dependencies(cur_tool)
                         
                         # Replace tool version, keeping the same reference count
-                        self.tools[new_tool.tool] = (new_tool, ref_cnt + 1)
+                        self.tools[new_tool.tool] = (new_tool, ref_cnt)
                         
-                        # Update version restriction
-                        if cur_ver is None:
-                            cur_res = wanted_res
+                        # Update version requirements
+                        if cur_req is not None:
+                            if not cur_req.merge(req, in_place=True):
+                                # Note: we should not reach this block
+                                raise Exception("Requirements conflict: '%s' / '%s'" % (cur_req, req))
+                        else:
+                            cur_req = req.clone()
                         
                         # Update version requirement info
-                        versions[new_tool.tool] = (new_tool.version, cur_res)
-                        
-                        sys.stderr.write("Add tool: %s %s [%s]\n" % (new_tool.tool, new_tool.version, cur_res))
+                        versions[new_tool.tool] = cur_req
                         
                         # Remove from wanted list if it is an exact version
-                        if cur_res == 0 and new_tool.tool in self.wants:
+                        if cur_req.is_fixed() and new_tool.tool in self.wants:
                             del(self.wants[new_tool.tool])
-                        
-                        # Loop though tool additional requirements
-                        if new_tool.requirements:
-                            for required_tool_name, required_tool_ver, restriction in new_tool.requirements:
-                                
-                                required_sem_version = parse_semantic_version(required_tool_ver)
-                                
-                                if required_tool_name not in self.tools:
-                                    # Tool not yet required
-                                    if required_tool_name in self.wants:
-                                        wv, wr = self.wants[required_tool_name]
-                                        changed, vr = update_requirement(wv, wr, required_tool_ver, restriction)
-                                        required_tool_ver, restriction = vr
-                                    else:
-                                        changed = True
-                                    
-                                    if changed:
-                                        wants_changed = True
-                                    self.wants[required_tool_name] = (required_tool_ver, restriction)
-                                
-                                else:
-                                    mismatch = False
-                                    op = "!="
-                                    cur_tool, _ = self.tools[required_tool_name]
-                                    
-                                    # Tool already required, check if version matches restriction
-                                    if required_tool_ver is not None:
-                                        
-                                        cur_ver, cur_res = versions[cur_tool.tool]
-                                        
-                                        if cur_tool.sem_version is None or required_sem_version is None:
-                                            # Not a semantic version... can only check for equality
-                                            restriction = 0
-                                            cur_res = 0
-                                        
-                                        if cur_res is None:
-                                            
-                                            if required_tool_name in self.wants:
-                                                wv, wr = self.wants[required_tool_name]
-                                                changed, vr = update_requirement(wv, wr, required_tool_ver, restriction)
-                                                required_tool_ver, restriction = vr
-                                            else:
-                                                changed = True
-                                            
-                                            if changed:
-                                                wants_changed = True
-                                            self.wants[required_tool_name] = (required_tool_ver, restriction)
-                                            
-                                        else:
-                                            if cur_res == 0:
-                                                mismatch = (required_tool_ver != cur_tool.version)
-                                            
-                                            elif cur_res == 1:
-                                                if not is_version_compatible(required_sem_version, cur_tool.sem_version) or \
-                                                   is_version_newer_than(required_sem_version, cur_tool.sem_version, True) is False:
-                                                    
-                                                    mismatch = True
-                                                    op = "<"
-                                            
-                                            else:  # cur_res == -1
-                                                if not is_version_compatible(required_sem_version, cur_tool.sem_version) or \
-                                                   is_version_older_than(required_sem_version, cur_tool.sem_version, True) is False:
-                                                   
-                                                    mismatch = True
-                                                    op = ">"
-                                        
-                                        if mismatch is None:
-                                            # Fallback to strict equality
-                                            mismatch = (cur_tool.version != required_tool_ver)
-                                    
-                                    if mismatch:
-                                        raise Exception("Version conflict for required tool: %s %s %s %s" % (cur_tool.tool, required_tool_ver, op, cur_tool.version))
             
             if wants_changed:
                 for n in self.wants.keys():
                     vr = self.wants[n]
                     if n in self.tools:
                         t = self.tools[n]
-                        if vr[0] is None:
-                            del(self.wants[n])
-                        elif vr[0] == t[0].version:
+                        if vr.matches(t[0].version):
                             del(self.wants[n])
                     
         
