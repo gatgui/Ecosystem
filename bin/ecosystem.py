@@ -577,6 +577,13 @@ class Requirement(object):
                 c.upper_strict = upper_strict
                 c.lower = lower
                 c.lower_strict = lower_strict
+                
+                if c.lower is not None and c.upper is not None and c.lower == c.upper:
+                    if c.lower_strict or c.upper_strict:
+                        return (False if in_place else None)
+                    c.fix = c.lower
+                    c.lower = None
+                    c.upper = None
             
             return (True if in_place else c)
 
