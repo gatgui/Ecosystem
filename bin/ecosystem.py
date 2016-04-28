@@ -490,7 +490,7 @@ def list_available_tools(verbose=False):
 
 class Environment(object):
     """Once initialized this will represent the environment defined by the wanted tools"""
-    def __init__(self, wants, environment_directory=None, force=False):
+    def __init__(self, wants, environment_directory=None, force=False, verbose=False):
         super(Environment, self).__init__()
         self.tools = {}  # tool name -> (tool object, reference count)
         self.variables = {}
@@ -864,6 +864,8 @@ Example:
                         help='just run make')
     parser.add_argument('-s', '--setenv', action='store_true',
                         help='output setenv statements to be used to set the shells environment')
+    parser.add_argument('-v', '--verbose', action='store_true',
+                        help='verbose output')
 
     args = parser.parse_args(argv)
 
@@ -885,7 +887,7 @@ Example:
 
     try:
         if run_build:
-            env = Environment(tools)
+            env = Environment(tools, verbose=args.verbose)
             if env.success:
                 env.get_env(os.environ)
                 build_type = os.getenv('PG_BUILD_TYPE')
@@ -906,13 +908,13 @@ Example:
                 call_process(MAKE_COMMAND)
 
         elif run_application:
-            env = Environment(tools)
+            env = Environment(tools, verbose=args.verbose)
             if env.success:
                 env.get_env(os.environ)
                 call_process(run_application)
 
         elif set_environment:
-            env = Environment(tools)
+            env = Environment(tools, verbose=args.verbose)
             if env.success:
                 output = env.get_env()
                 if output:
