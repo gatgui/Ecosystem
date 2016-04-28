@@ -481,6 +481,9 @@ class Requirement(object):
                 s = self.name + s
         return s
     
+    def __repr__(self):
+        return str(self)
+    
     def is_valid(self):
         return (self.name is not None)
     
