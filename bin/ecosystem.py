@@ -721,9 +721,11 @@ class Environment(object):
                         # Check if new_tool matches requirements
                         # Note: wants requirements includes current environment requirements
                         req = self.wants[new_tool.tool]
+                        if verbose:
+                            sys.stderr.write("Check %s %s against %s\n" % (new_tool.tool, new_tool.version, req))
                         if not req.matches(new_tool.version):
                             if verbose:
-                                sys.stderr.write("Skip %s %s: doesn't match requirements: %s\n" % (new_tool.tool, new_tool.version, req))
+                                sys.stderr.write("Skip %s %s: doesn't match requirements (%s)\n" % (new_tool.tool, new_tool.version, req))
                             continue
                         
                         # Check against current environment version
@@ -766,7 +768,7 @@ class Environment(object):
                                 if new_req is None:
                                     # Check if dependency.name in self.tools?
                                     dependencies_conflict = True
-                                    conflict_message = "Skip tool because of requirements conflict: '%s' / '%s'" % (self.wants[dependency.name], dependency)
+                                    conflict_message = "Skip %s %s: requirements conflict (%s / %s)" % (new_tool.tool, new_tool.version, self.wants[dependency.name], dependency)
                                     break
                             else:
                                 dependencies_change_wants = True
@@ -778,7 +780,7 @@ class Environment(object):
                                 
                                 if not new_req.merge(dreq, in_place=True):
                                     dependencies_conflict = True
-                                    conflict_message = "Skip tool because of environment conflict: '%s' / '%s'" % (new_req, dreq)
+                                    conflict_message = "Skip %s %s: environment conflict (%s / %s)" % (new_tool.tool, new_tool.version, new_req, dreq)
                                     break
                             
                             dependencies_reqs[dependency.name] = new_req
@@ -801,7 +803,7 @@ class Environment(object):
                         
                         
                         if verbose:
-                            sys.stderr.write("Add tool: %s %s\n" % (new_tool.tool, new_tool.version))
+                            sys.stderr.write("Add tool %s %s\n" % (new_tool.tool, new_tool.version))
                         
                         
                         if cur_tool is not None and cur_tool.version != new_tool.version:
@@ -815,17 +817,27 @@ class Environment(object):
                         
                         # Update version requirements
                         if cur_req is not None:
+                            if verbose:
+                                sys.stderr.write("  -> merge wants requirements %s in %s\n" % (req, cur_req))
                             if not cur_req.merge(req, in_place=True):
                                 # Note: we should not reach this block
-                                raise Exception("Requirements conflict: '%s' / '%s'" % (cur_req, req))
+                                raise Exception("%s %s requirements conflict (%s / %s)" % (cur_tool.tool, cur_tool.version, cur_req, req))
+                            if verbose:
+                                sys.stderr.write("  -> new requirements: %s\n" % cur_req)
                         else:
+                            if verbose:
+                                sys.stderr.write("  -> set requirements to wants requirements: %s\n" % req)
                             cur_req = req.clone()
                         
                         # Update version requirement info
                         versions[new_tool.tool] = cur_req
+                        if verbose:
+                            sys.stderr.write("  -> requirements: %s\n" % cur_req)
                         
                         # Remove from wanted list if it is an exact version
                         if cur_req.is_fixed() and new_tool.tool in self.wants:
+                            if verbose:
+                                sys.stderr.write("  -> version was fixed, remove from wants\n")
                             del(self.wants[new_tool.tool])
             
             if wants_changed:
@@ -837,7 +849,7 @@ class Environment(object):
                         t = self.tools[n]
                         if vr.matches(t[0].version):
                             if verbose:
-                                sys.stderr.write("  Remove '%s' from wanted list\n" % n)
+                                sys.stderr.write("  Remove %s from wanted list\n" % n)
                             del(self.wants[n])
                     
         
@@ -853,9 +865,9 @@ class Environment(object):
         
         if len(self.wants) != 0:
             missing_tools = ', '.join([k for k, _ in self.wants.iteritems()])
-            print 'Unable to resolve all of the required tools ({0} is missing), \
-                   please check your list and try again!'.format(missing_tools)
-            sys.stderr.write("%s\n" % versions)
+            print 'Unable to resolve all of the required tools ({0} is missing).\nPlease check your list and try again!'.format(missing_tools)
+            if verbose:
+                sys.stderr.write("Successfully Resolved: %s\n" % versions.keys())
             self.success = False
 
         for tool_name, tool in self.tools.items():
@@ -876,8 +888,7 @@ class Environment(object):
         missing_dependencies = set([dep for dep in ext_dependencies if not os.getenv(dep)])
         if missing_dependencies:
             missing_vars = ', '.join(missing_dependencies)
-            print 'Unable to resolve all of the required variables ({0} is missing), \
-                       please check your list and try again!'.format(missing_vars)
+            print 'Unable to resolve all of the required variables ({0} is missing).\nPlease check your list and try again!'.format(missing_vars)
             self.success = False
 
     def get_var(self, var):
