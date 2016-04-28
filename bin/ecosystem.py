@@ -822,11 +822,9 @@ class Environment(object):
                             if not cur_req.merge(req, in_place=True):
                                 # Note: we should not reach this block
                                 raise Exception("%s %s requirements conflict (%s / %s)" % (cur_tool.tool, cur_tool.version, cur_req, req))
-                            if verbose:
-                                sys.stderr.write("  -> new requirements: %s\n" % cur_req)
                         else:
                             if verbose:
-                                sys.stderr.write("  -> set requirements to wants requirements: %s\n" % req)
+                                sys.stderr.write("  -> set requirements to wants requirements\n")
                             cur_req = req.clone()
                         
                         # Update version requirement info
