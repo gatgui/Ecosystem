@@ -478,7 +478,7 @@ class Requirement(object):
                     if s:
                         s += ","
                     s += " %s%s" % (("<" if self.upper_strict else "<="), self.upper)
-                s = self.name + s
+            s = self.name + s
         return s
     
     def __repr__(self):
@@ -682,10 +682,6 @@ class Environment(object):
                 continue
             versioned_tools[t.tool + str(t.version)] = t
 
-        wants_changed = True
-        loop_count = 1
-        
-        
         # Local helper function
         def unref_dependencies(tool):
             for dependency in tool.requirements:
@@ -699,11 +695,14 @@ class Environment(object):
                         del(self.tools[dependency.name])
         
         
+        wants_changed = True
+        loop_count = 1
+        
         while wants_changed:
             if verbose:
                 sys.stderr.write("=== Loop existing tools %d\n" % loop_count)
-                sys.stderr.write("=> Resolved so far: %s\n" % versions)
-                sys.stderr.write("=> Wanted list: %s\n" % self.wants)
+                sys.stderr.write("=> Resolved so far: %s\n" % versions.values())
+                sys.stderr.write("=> Wanted list: %s\n" % self.wants.values())
             loop_count += 1
             
             wants_changed = False
@@ -735,9 +734,11 @@ class Environment(object):
                                 if cur_req is not None and not cur_req.matches(new_tool.version):
                                     raise Exception("Version conflict for tool: %s %s %s %s" % (new_tool.tool, new_tool.version, op, cur_tool.version))
                                 
-                                # TODO: don't update for older version of tool?
-                                # if new_tool.version.is_older_than(cur_tool.version, inclusive=False):
-                                #     continue
+                                if new_tool.version.is_older_than(cur_tool.version, inclusive=False):
+                                    if verbose:
+                                        sys.stderr.write("Skip older tool version: %s %s (< %s)\n" % (new_tool.tool, new_tool.version, cur_tool.version))
+                                    continue
+                                
                                 if verbose:
                                     sys.stderr.write("Update tool version: %s %s -> %s\n" % (new_tool.tool, cur_tool.version, new_tool.version))
                             
@@ -781,7 +782,7 @@ class Environment(object):
                                 sys.stderr.write("%s\n" % conflict_message)
                             continue
                         else:
-                            wants_changed = dependencies_change_wants
+                            wants_changed = (wants_changed or dependencies_change_wants)
                         
                         # Loop through dependencies a second time to increments references and update wanted list
                         for dependency in new_tool.requirements:
@@ -821,11 +822,15 @@ class Environment(object):
                             del(self.wants[new_tool.tool])
             
             if wants_changed:
+                if verbose:
+                    sys.stderr.write("=> Wanted list: %s\n" % self.wants.values())
                 for n in self.wants.keys():
                     vr = self.wants[n]
                     if n in self.tools:
                         t = self.tools[n]
                         if vr.matches(t[0].version):
+                            if verbose:
+                                sys.stderr.write("  Remove '%s' from wanted list\n" % n)
                             del(self.wants[n])
                     
         
