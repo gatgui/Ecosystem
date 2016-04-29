@@ -596,17 +596,20 @@ class Tool(object):
         try:
             with open(filename, 'r') as f:
                 self.in_dictionary = eval(f.read(), globals(), {"eval": ValueExpr})
+            
+            if self.in_dictionary:
+                self.path = os.path.abspath(os.path.dirname(filename)).replace("\\", "/")
+                self.tool = self.in_dictionary['tool']
+                self.version = Version(self.in_dictionary['version'])
+                self.platforms = self.in_dictionary['platforms']
+                self.requirements = []
+                for req in self.in_dictionary['requires']:
+                    self.requirements.append(Requirement(req))
         except IOError:
             print 'Unable to find file {0} ...'.format(filename)
-
-        if self.in_dictionary:
-            self.path = os.path.abspath(os.path.dirname(filename)).replace("\\", "/")
-            self.tool = self.in_dictionary['tool']
-            self.version = Version(self.in_dictionary['version'])
-            self.platforms = self.in_dictionary['platforms']
-            self.requirements = []
-            for req in self.in_dictionary['requires']:
-                self.requirements.append(Requirement(req))
+        except Exception, e:
+            print('Failed to read tool environment: %s' % filename)
+            raise e
     
     @property
     def platform_supported(self):
