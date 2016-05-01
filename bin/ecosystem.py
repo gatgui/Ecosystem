@@ -996,6 +996,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(prog='ecosystem',
                                      formatter_class=argparse.RawTextHelpFormatter,
                                      description=description,
+                                     add_help=False,
                                      epilog='''
 Example:
     python ecosystem.py -t maya2014,vray3.05,yeti1.3.0 -r maya
@@ -1016,8 +1017,14 @@ Example:
                         help='output setenv statements to be used to set the shells environment')
     parser.add_argument('-v', '--verbose', action='store_true',
                         help='verbose output')
+    parser.add_argument('-h', '--help', action='store_true',
+                        help='show this help')
 
     args = parser.parse_args(argv)
+
+    if args.help:
+        parser.print_help()
+        return 0
 
     if args.listtools:
         for tool in list_available_tools(args.verbose):
