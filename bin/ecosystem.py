@@ -1063,12 +1063,16 @@ Example:
                     MAKE_COMMAND.append("package")
 
                 call_process(MAKE_COMMAND)
+            else:
+                return 1
 
         elif run_application:
             env = Environment(tools, verbose=args.verbose)
             if env.success:
                 env.get_env(os.environ)
                 call_process(run_application)
+            else:
+                return 1
 
         elif set_environment:
             env = Environment(tools, verbose=args.verbose)
@@ -1076,6 +1080,8 @@ Example:
                 output = env.get_env()
                 if output:
                     print output
+            else:
+                return 1
         return 0
     except Exception, e:
         import traceback
