@@ -640,10 +640,10 @@ def list_tools(verbose=False):
     if environment_locations:
         for environment_location in environment_locations.split(os.pathsep):
             if verbose:
-                print("Process directory \"%s\"" % environment_location)
+                sys.stderr.write("Process directory \"%s\"\n" % environment_location)
             for environment_file in glob.glob(environment_location + "/*.env"):
                 if verbose:
-                    print("  Process file \"%s\"" % environment_file)
+                    sys.stderr.write("  Process file \"%s\"\n" % environment_file)
                 file_name = os.path.basename(environment_file)
                 ignore = (file_name in environment_file_names)
                 if not ignore:
@@ -654,10 +654,10 @@ def list_tools(verbose=False):
                         environment_files.append(environment_file)
                     else:
                         if verbose:
-                            print("    Already processed")
+                            sys.stderr.write("    Already processed\n")
                 else:
                     if verbose:
-                        print("    Already processed")
+                        sys.stderr.write("    Already processed\n")
 
     return [Tool(file_path) for file_path in environment_files]
 
