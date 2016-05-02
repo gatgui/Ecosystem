@@ -1,5 +1,3 @@
-#!/usr/bin/python
-
 # Copyright (c) 2014, Peregrine Labs, a division of Peregrine Visual Storytelling Ltd. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -904,7 +902,7 @@ class Environment(object):
                 elif ECO_SHELL == 'csh':
                     self.value = self.value + 'setenv ' + var.name + ' ' + var_value
                 else:
-                    self.value = self.value + var.name + '=' + ENV_REF_EXP.sub(r"$\1", var_value)
+                    self.value = self.value + 'export ' + var.name + '=' + ENV_REF_EXP.sub(r"$\1", var_value)
                 if os.getenv(var.name):
                     if not self.force and not var.strict:
                         if platform.system().lower() == 'windows':
