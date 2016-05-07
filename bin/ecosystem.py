@@ -276,17 +276,19 @@ class Variable(object):
 
     def get_env(self):
         value = ''
-        count = 0
         for var_value in self.values:
-            if count != 0:
-                value = value + os.pathsep
             # Do not make path absolute if it starts with a environment variable reference
             if self.absolute and not var_value.startswith("${"):
                 pathpat = os.path.abspath(ENV_REF_EXP.sub("*", var_value)).replace("\\", "/")
                 if len(glob.glob(pathpat)) > 0:
                     var_value = os.path.abspath(var_value).replace("\\", "/")
-            value = value + var_value
-            count += 1
+            if not var_value:
+                continue
+            else:
+                if value:
+                    value = value + os.pathsep + var_value
+                else:
+                    value = var_value
         return value
 
 
