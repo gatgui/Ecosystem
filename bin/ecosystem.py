@@ -149,6 +149,7 @@ ECO_SHELL = os.environ.get("ECO_SHELL", "csh")
 ENV_REF_EXP = re.compile(r"\$\{([^}]*)\}")
 VER_SPLIT_EXP = re.compile(r"^([^\d]+)(\d.*)$")
 SEM_VER_EXP = re.compile(r"(\d+\.){2,}\d+")
+VER_SEP = "/"
 
 
 class ValueWrapper(object):
@@ -454,15 +455,24 @@ class Requirement(object):
                 if restriction != 0:
                     raise Exception("Invalid requirement specification: '%s' (+/- only available for semantic versioning)" % s)
                 
-                m = VER_SPLIT_EXP.match(s)
-                
-                if m is not None:
-                    self.name = self.group(1)
-                    vs = self.group(2)
+                if VER_SEP in s:
+                    self.name, vs = s.split(VER_SEP)
                     if vs:
                         self.fix = Version(vs)
+                
                 else:
-                    self.name = s
+                    m = VER_SPLIT_EXP.match(s)
+                    
+                    if m is not None:
+                        self.name = m.group(1)
+                        vs = m.group(2)
+                        if vs:
+                            self.fix = Version(vs)
+                    else:
+                        self.name = s
+            
+            while self.name[-1] == VER_SEP:
+                self.name = self.name[:-1]
     
     def __str__(self):
         s = ""
@@ -661,7 +671,7 @@ def list_tools(verbose=False):
 
 
 def list_available_tools(verbose=False):
-    return sorted([t.tool + str(t.version) for t in list_tools(verbose)])
+    return sorted([t.tool + VER_SEP + str(t.version) for t in list_tools(verbose)])
 
 
 class Environment(object):
