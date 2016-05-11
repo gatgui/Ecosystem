@@ -634,8 +634,15 @@ class Tool(object):
         
         # check for optional parameters
         if 'optional' in self.in_dictionary:
-            for optional_name, optional_value in self.in_dictionary['optional'].items():
-                if optional_name in env.tools:
+            for optional_names, optional_value in self.in_dictionary['optional'].items():
+                if type(optional_names) in (str, unicode):
+                    optional_names = (optional_names,)
+                foundall = True
+                for optional_name in optional_names:
+                    if not optional_name in env.tools:
+                        foundall = False
+                        break
+                if foundall:
                     for name, value in optional_value.items():
                         if name not in env.variables:
                             env.variables[name] = Variable(name)
