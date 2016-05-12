@@ -530,7 +530,7 @@ def main(argv=None):
 
     # parse the (command line) arguments; python 2.7+ (or download argparse)
     import argparse
-    description = 'Peregrine Ecosystem, environment, build and deploy management toolset v0.1.1'
+    description = 'Peregrine Ecosystem, environment, build and deploy management toolset v0.6.0'
     parser = argparse.ArgumentParser(prog='ecosystem',
                                      formatter_class=argparse.RawTextHelpFormatter,
                                      description=description,
