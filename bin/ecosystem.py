@@ -605,16 +605,20 @@ class Tool(object):
         super(Tool, self).__init__()
         try:
             with open(filename, 'r') as f:
-                self.in_dictionary = eval(f.read(), globals(), {"eval": ValueExpr})
+                in_dictionary = eval(f.read(), globals(), {"eval": ValueExpr})
             
-            if self.in_dictionary:
+            if in_dictionary:
                 self.path = os.path.abspath(os.path.dirname(filename)).replace("\\", "/")
-                self.tool = self.in_dictionary['tool']
-                self.version = Version(self.in_dictionary['version'])
-                self.platforms = self.in_dictionary['platforms']
+                # 'tools', 'platforms' have to be defined 
+                self.tool = in_dictionary['tool']
+                self.platforms = in_dictionary['platforms']
                 self.requirements = []
-                for req in self.in_dictionary['requires']:
+                # 'version', 'environment', 'optional' and 'requires' may be empty or undefined
+                self.version = Version(in_dictionary.get('version', ''))
+                for req in in_dictionary.get('requires', []):
                     self.requirements.append(Requirement(req))
+                self.environment = in_dictionary.get('environment', {})
+                self.optional = in_dictionary.get('optional', {})
         except IOError:
             print 'Unable to find file {0} ...'.format(filename)
         except Exception, e:
@@ -627,26 +631,25 @@ class Tool(object):
         return platform.system().lower() in self.platforms if self.platforms else False
     
     def get_vars(self, env):
-        for name, value in self.in_dictionary['environment'].items():
+        for name, value in self.environment.items():
             if name not in env.variables:
                 env.variables[name] = Variable(name)
             env.variables[name].append_value(value, path=self.path, platform=platform.system().lower(), tool=self.tool, version=str(self.version))
         
         # check for optional parameters
-        if 'optional' in self.in_dictionary:
-            for optional_names, optional_value in self.in_dictionary['optional'].items():
-                if type(optional_names) in (str, unicode):
-                    optional_names = (optional_names,)
-                foundall = True
-                for optional_name in optional_names:
-                    if not optional_name in env.tools:
-                        foundall = False
-                        break
-                if foundall:
-                    for name, value in optional_value.items():
-                        if name not in env.variables:
-                            env.variables[name] = Variable(name)
-                        env.variables[name].append_value(value, path=self.path, platform=platform.system().lower(), tool=self.tool, version=str(self.version))
+        for optional_names, optional_value in self.optional.items(): 
+            if type(optional_names) in (str, unicode):
+                optional_names = (optional_names,)
+            foundall = True
+            for optional_name in optional_names:
+                if not optional_name in env.tools:
+                    foundall = False
+                    break
+            if foundall:
+                for name, value in optional_value.items():
+                    if name not in env.variables:
+                        env.variables[name] = Variable(name)
+                    env.variables[name].append_value(value, path=self.path, platform=platform.system().lower(), tool=self.tool, version=str(self.version))
 
 
 def list_tools(verbose=False):
