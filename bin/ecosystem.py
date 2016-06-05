@@ -276,15 +276,17 @@ class Variable(object):
 
     def get_env(self):
         value = ''
+        unique_values = set()
         for var_value in self.values:
             # Do not make path absolute if it starts with a environment variable reference
             if self.absolute and not var_value.startswith("${"):
                 pathpat = os.path.abspath(ENV_REF_EXP.sub("*", var_value)).replace("\\", "/")
                 if len(glob.glob(pathpat)) > 0:
                     var_value = os.path.abspath(var_value).replace("\\", "/")
-            if not var_value:
+            if not var_value or var_value in unique_values:
                 continue
             else:
+                unique_values.add(var_value)
                 if value:
                     value = value + os.pathsep + var_value
                 else:
