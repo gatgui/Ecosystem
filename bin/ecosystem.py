@@ -924,7 +924,7 @@ class Environment(object):
                 elif ECO_SHELL == 'csh':
                     self.value = self.value + 'setenv ' + var.name + ' ' + var_value
                 else:
-                    self.value = self.value + 'export ' + var.name + '=' + ENV_REF_EXP.sub(r"$\1", var_value)
+                    self.value = self.value + 'export ' + var.name + '=' + var_value
                 if os.getenv(var.name):
                     if not self.force and not var.strict:
                         if platform.system().lower() == 'windows':
