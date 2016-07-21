@@ -297,6 +297,12 @@ class Variable(object):
 class Version(object):
     def __init__(self, s=None):
         super(Version, self).__init__()
+        self.value = ""
+        self.semantic = False
+        self.maj = -1
+        self.min = -1
+        self.patch = -1
+        self.extra = []
         if s is not None:
             self.value = s
             m = SEM_VER_EXP.match(self.value)
@@ -307,13 +313,6 @@ class Version(object):
                 self.min = spl[-2]
                 self.maj = spl[-3]
                 self.extra = spl[:-3]
-        else:
-            self.value = ""
-            self.semantic = False
-            self.maj = -1
-            self.min = -1
-            self.patch = -1
-            self.extra = []
     
     def __str__(self):
         return self.value
