@@ -191,6 +191,11 @@ class ValueWrapper(object):
             return (self._current_os in self._value['abs']) if isinstance(abs_value, list) else abs_value
         return False
 
+    @property
+    def prepend_value(self):
+        return self._value.get('prepend', False) if isinstance(self._value, dict) else False
+    
+
 
 class ValueExpr(ValueWrapper):
     def __init__(self, value=None):
@@ -247,6 +252,9 @@ class Variable(object):
         if v is None:
             return
         vl = ([v] if not isinstance(v, list) else v)
+        prepend = value_wrapper.prepend_value
+        if prepend:
+            vl.reverse()
         for v in vl:
             _is_expr = isinstance(v, ValueExpr)
             v = self.substitute_at(v.value if _is_expr else v, **subst_keys)
@@ -264,7 +272,10 @@ class Variable(object):
                 ev = [v]
             for v in ev:
                 if v not in self.values:
-                    self.values.append(v)
+                    if prepend:
+                        self.values.insert(0, v)
+                    else:
+                        self.values.append(v)
                     for var_dependency in self.list_dependencies(v):
                         if not var_dependency in self.dependencies:
                             self.dependencies.append(var_dependency)
