@@ -31,7 +31,6 @@
 import os
 import glob
 import re
-# import copy
 import getopt
 import sys
 import string
@@ -285,7 +284,7 @@ class Variable(object):
             return True
         return False
 
-    def get_env(self):
+    def get_env(self, escape=False):
         value = ''
         unique_values = set()
         for var_value in self.values:
@@ -294,6 +293,12 @@ class Variable(object):
                 pathpat = os.path.abspath(ENV_REF_EXP.sub("*", var_value)).replace("\\", "/")
                 if len(glob.glob(pathpat)) > 0:
                     var_value = os.path.abspath(var_value).replace("\\", "/")
+            if escape:
+                # For now only escape if & | < > found
+                for c in "&|<>":
+                    if c in var_value:
+                        var_value = '"%s"' % var_value
+                        break
             if not var_value or var_value in unique_values:
                 continue
             else:
@@ -930,7 +935,7 @@ class Environment(object):
                 for dependency in var.dependencies:
                     if dependency in self.variables:
                         self.get_var(self.variables[dependency])
-                var_value = var.get_env()
+                var_value = var.get_env(escape=True)
                 if platform.system().lower() == 'windows':
                     self.value = self.value + 'set ' + var.name + '=' + ENV_REF_EXP.sub(r"%\1%", var_value)
                 elif ECO_SHELL == 'csh':
