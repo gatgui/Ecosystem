@@ -559,10 +559,19 @@ class Requirement(object):
             return (False if in_place else None)
         
         if self.fix is not None:
-            if rhs.fix is not None and self.fix == rhs.fix:
-                return (True if in_place else self.clone())
+            if rhs.fix is not None:
+                if self.fix == rhs.fix:
+                    return (True if in_place else self.clone())
+                else:
+                    return (False if in_place else None)
             else:
-                return (False if in_place else None)
+                # run the other way around to check that rhs requirements is compatible with fixed version
+                rv = rhs.merge(self, in_place=False)
+                if rv is None:
+                    return (False if in_place else None)
+                else:
+                    # self is already fixed, nothing to update
+                    return (True if in_place else self.clone())
         
         else:
             c = (self if in_place else self.clone())
