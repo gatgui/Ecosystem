@@ -1,0 +1,23 @@
+Changes from official version
+
+Tools
+   - Add -v/--verbose flag to eco command
+   - Add ecosxterm shell command to start a new OSX terminal with specified environments
+      It accepts the same flag as standard eco command
+   - bash environment setup support:
+      The ECO_SHELL environement variable can be set to 'bash' or 'csh' (default) to
+      control the output of eco command
+
+Environment
+   - Add special tokens '@path', '@tool' and '@version'.
+      Those are replaced respectively by the .env file fullpath, the current tool name and version.
+   - Support for flexible requirements based on 'Semantic Versioning 2.0.0'
+      (http://semver.org/spec/v2.0.0.html)
+   - Allow simultaneous usage of 'strict' and 'abs' in environment keys
+   - Add new 'prepend' boolean option to environment keys
+   - Allow usage of python eval in key values:
+      Example: "HOUDINI_MAJOR_RELEASE": eval('"@version".split(".")[0]'),
+   - Support , separated notation in optionals ('&&' logic)
+   - Less picky about missing keys at environment top level (only 'tool' and 'platforms' are mandatory)
+   - Allow usage of '/' to separate tool name from version in requirements
+      (usefull for libraries whose names end with a number like xml2, hdf5)
