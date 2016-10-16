@@ -147,7 +147,7 @@ if platform.system().lower() == 'windows':
 ECO_SHELL = os.environ.get("ECO_SHELL", "csh")
 ENV_REF_EXP = re.compile(r"\$\{([^}]*)\}")
 VER_SPLIT_EXP = re.compile(r"^([^\d]+)(\d.*)$")
-SEM_VER_EXP = re.compile(r"(\d+\.){2,}\d+")
+SEM_VER_EXP = re.compile(r"((\d+\.){2,}\d+)(\-([a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)*))?(\+([a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)*))?")
 VER_SEP = "/"
 
 
@@ -319,12 +319,30 @@ class Version(object):
         self.min = -1
         self.patch = -1
         self.extra = []
+        self.build = None
+        self.prerelease = None
         if s is not None:
             self.value = s
             m = SEM_VER_EXP.match(self.value)
             self.semantic = (m is not None)
             if m is not None:
-                spl = map(int, s.split("."))
+                spl = map(int, m.group(1).split("."))
+                if m.group(3):
+                    self.prerelease = m.group(4).split(".")
+                    for i in xrange(len(self.prerelease)):
+                        try:
+                            v = int(self.prerelease[i])
+                            self.prerelease[i] = v
+                        except:
+                            pass
+                if m.group(6):
+                    self.build = m.group(7).split(".")
+                    for i in xrange(len(self.build)):
+                        try:
+                            v = int(self.build[i])
+                            self.build[i] = v
+                        except:
+                            pass
                 self.patch = spl[-1]
                 self.min = spl[-2]
                 self.maj = spl[-3]
@@ -365,6 +383,8 @@ class Version(object):
         c.min = self.min
         c.patch = self.patch
         c.extra = self.extra[:]
+        c.prerelease = (None if self.prerelease is None else self.prerelease[:])
+        c.build = (None if self.build is None else self.build[:])
         return c
     
     def is_newer_than(self, rhs, inclusive=True):
@@ -388,6 +408,40 @@ class Version(object):
                 return True
             elif self.patch < rhs.patch:
                 return False
+            if not self.prerelease and rhs.prerelease:
+                return True
+            elif self.prerelease and not rhs.prerelease:
+                return False
+            elif self.prerelease:
+                # rhs.prerelease also exists
+                n0 = len(self.prerelease)
+                n1 = len(rhs.prerelease);
+                n = min(n0, n1)
+                for i in xrange(n):
+                    if type(self.prerelease[i]) == int:
+                        if type(rhs.prerelease[i]) == int:
+                            if self.prerelease[i] > rhs.prerelease[i]:
+                                return True
+                            elif self.prerelease[i] < rhs.prerelease[i]:
+                                return False
+                        else:
+                            # non-numeric have higher precedence
+                            return False
+                    else:
+                        if type(rhs.prerelease[i]) == int:
+                            # non-numeric have higher precedence
+                            return True
+                        else:
+                            # alpha numerical order
+                            if self.prerelease[i] > rhs.prerelease[i]:
+                                return True
+                            elif self.prerelease[i] < rhs.prerelease[i]:
+                                return False
+                # More specified version have higher precedence
+                if n0 > n1:
+                    return True
+                elif n0 < n1:
+                    return False
             return (True if inclusive else False)
         else:
             if inclusive:
@@ -416,6 +470,39 @@ class Version(object):
                 return True
             elif self.patch > rhs.patch:
                 return False
+            if not self.prerelease and rhs.prerelease:
+                return False
+            elif self.prerelease and not rhs.prerelease:
+                return True
+            elif self.prerelease:
+                n0 = len(self.prerelease)
+                n1 = len(rhs.prerelease);
+                n = min(n0, n1)
+                for i in xrange(n):
+                    if type(self.prerelease[i]) == int:
+                        if type(rhs.prerelease[i]) == int:
+                            if self.prerelease[i] > rhs.prerelease[i]:
+                                return False
+                            elif self.prerelease[i] < rhs.prerelease[i]:
+                                return True
+                        else:
+                            # non-numeric have higher precedence
+                            return True
+                    else:
+                        if type(rhs.prerelease[i]) == int:
+                            # non-numeric have higher precedence
+                            return False
+                        else:
+                            # alpha numerical order
+                            if self.prerelease[i] > rhs.prerelease[i]:
+                                return False
+                            elif self.prerelease[i] < rhs.prerelease[i]:
+                                return True
+                # More specified version have higher precedence
+                if n0 > n1:
+                    return False
+                elif n0 < n1:
+                    return True
             return (True if inclusive else False)
         else:
             if inclusive:
@@ -772,6 +859,10 @@ class Environment(object):
                         req = self.wants[new_tool.tool]
                         if verbose:
                             sys.stderr.write("Check %s %s against %s\n" % (new_tool.tool, new_tool.version, req))
+                        if not req.is_fixed() and new_tool.version.prerelease:
+                            if verbose:
+                                sys.stderr.write("Skip %s pre-release version %s\n" % (new_tool.tool, new_tool.version))
+                            continue
                         if not req.matches(new_tool.version):
                             if verbose:
                                 sys.stderr.write("Skip %s %s: doesn't match requirements (%s)\n" % (new_tool.tool, new_tool.version, req))
