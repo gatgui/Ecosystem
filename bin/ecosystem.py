@@ -265,7 +265,7 @@ class Variable(object):
                     else:
                         ev = map(str, ev)
                 except Exception, e:
-                    print("Failed to evaluate value expression: %s" % v)
+                    sys.stderr.write("Failed to evaluate value expression: %s\n" % v)
                     continue
             else:
                 ev = [v]
@@ -733,9 +733,9 @@ class Tool(object):
                 self.environment = in_dictionary.get('environment', {})
                 self.optional = in_dictionary.get('optional', {})
         except IOError:
-            print 'Unable to find file {0} ...'.format(filename)
+            sys.stderr.write('Unable to find file {0} ...\n'.format(filename))
         except Exception, e:
-            print('Failed to read tool environment: %s' % filename)
+            sys.stderr.write('Failed to read tool environment: %s\n' % filename)
             raise e
     
     @property
@@ -889,7 +889,7 @@ class Environment(object):
                                     continue
                                 
                                 if verbose:
-                                    sys.stderr.write("Update tool version: %s %s -> %s\n" % (new_tool.tool, cur_tool.version, new_tool.version))
+                                    sys.stderr.write("Try to update tool version: %s %s -> %s\n" % (new_tool.tool, cur_tool.version, new_tool.version))
                             
                             else:
                                 # Same tool, same version, nothing specific to do
@@ -1003,9 +1003,7 @@ class Environment(object):
         
         if len(self.wants) != 0:
             missing_tools = ', '.join([k for k, _ in self.wants.iteritems()])
-            print 'Unable to resolve all of the required tools ({0} is missing).\nPlease check your list and try again!'.format(missing_tools)
-            if verbose:
-                sys.stderr.write("Successfully Resolved: %s\n" % versions.keys())
+            sys.stderr.write('Unable to resolve all of the required tools ({0}).\nPlease check your list and try again!\n'.format(missing_tools))
             self.success = False
 
         for tool_name, tool in self.tools.items():
@@ -1026,7 +1024,7 @@ class Environment(object):
         missing_dependencies = set([dep for dep in ext_dependencies if not os.getenv(dep)])
         if missing_dependencies:
             missing_vars = ', '.join(missing_dependencies)
-            print 'Unable to resolve all of the required variables ({0} is missing).\nPlease check your list and try again!'.format(missing_vars)
+            sys.stderr.write('Unable to resolve all of the required variables ({0} is missing).\nPlease check your list and try again!\n'.format(missing_vars))
             self.success = False
 
     def get_var(self, var):
