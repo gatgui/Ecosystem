@@ -167,11 +167,15 @@ class ValueWrapper(object):
         if isinstance(self._value, dict):
             v1 = self._value.get(self._current_os, None)
             if v1:
-                v2 = self._value.get("common", None)
-                if v2:
-                    v1 = ([v1] if not isinstance(v1, list) else v1)
-                    v2 = ([v2] if not isinstance(v2, list) else v2)
-                    return v1 + filter(lambda x: x not in v1, v2)
+                # merge platform specific and common value only if 'strict' is False
+                if not self._value.get('strict', False):
+                    v2 = self._value.get("common", None)
+                    if v2:
+                        v1 = ([v1] if not isinstance(v1, list) else v1)
+                        v2 = ([v2] if not isinstance(v2, list) else v2)
+                        return v1 + filter(lambda x: x not in v1, v2)
+                    else:
+                        return v1
                 else:
                     return v1
             else:
