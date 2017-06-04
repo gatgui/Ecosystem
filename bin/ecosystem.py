@@ -1038,12 +1038,14 @@ class Environment(object):
                     if dependency in self.variables:
                         self.get_var(self.variables[dependency])
                 var_value = var.get_env(escape=True)
+                var_exp_value = ''
                 if platform.system().lower() == 'windows':
-                    self.value = self.value + 'set ' + var.name + '=' + ENV_REF_EXP.sub(r"%\1%", var_value)
+                    var_exp_value = 'set ' + var.name + '=' + ENV_REF_EXP.sub(r"%\1%", var_value)
                 elif ECO_SHELL == 'csh':
-                    self.value = self.value + 'setenv ' + var.name + ' ' + var_value
+                    var_exp_value = 'setenv ' + var.name + ' ' + var_value
                 else:
-                    self.value = self.value + 'export ' + var.name + '=' + var_value
+                    var_exp_value = 'export ' + var.name + '=' + var_value
+                self.value = self.value + var_exp_value
                 if os.getenv(var.name):
                     if not self.force and not var.strict:
                         if platform.system().lower() == 'windows':
@@ -1058,6 +1060,11 @@ class Environment(object):
                             self.value = self.value + os.pathsep + var_ref
                 self.value = self.value + '\n'
                 self.defined_variables.append(var.name)
+                # Little hack for osx in order to somehow preserve DYLD_LIBRARY_PATH value which is
+                #   wiped by all system binaries when SIP is enabled
+                if sys.platform == 'darwin' and var.name == 'DYLD_LIBRARY_PATH':
+                    self.value = self.value + var_exp_value.replace('DYLD_LIBRARY_PATH', '_DYLD_LIBRARY_PATH') + '\n'
+                    self.defined_variables.append('_' + var.name)
 
     def get_var_env(self, var):
         if self.success:
@@ -1074,6 +1081,11 @@ class Environment(object):
                             var_value = var_value + os.pathsep + os.environ[var.name]
                 self.defined_variables.append(var.name)
                 os.environ[var.name] = var_value
+                # Little hack for osx in order to somehow preserve DYLD_LIBRARY_PATH value which is
+                #   wiped by all system binaries when SIP is enabled
+                if sys.platform == 'darwin' and var.name == 'DYLD_LIBRARY_PATH':
+                    self.defined_variables.append('_' + var.name)
+                    os.environ['_DYLD_LIBRARY_PATH'] = var_value
 
     def get_env(self, set_environment=False):
         # combine all of the variable in all the tools based on a dependency list
@@ -1208,7 +1220,7 @@ Example:
         elif run_application:
             env = Environment(tools, verbose=args.verbose)
             if env.success:
-                env.get_env(os.environ)
+                env.get_env(set_environment=True)
                 call_process(run_application)
             else:
                 return 1
@@ -1216,7 +1228,7 @@ Example:
         elif set_environment:
             env = Environment(tools, verbose=args.verbose)
             if env.success:
-                output = env.get_env()
+                output = env.get_env(set_environment=False)
                 if output:
                     print output
             else:
