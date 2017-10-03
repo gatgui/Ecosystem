@@ -201,6 +201,21 @@ class ValueWrapper(object):
         return False
 
     @property
+    def if_matches(self):
+        if isinstance(self._value, dict):
+            v = self._value.get('if_matches', None)
+            if isinstance(v, dict):
+                rv = {}
+                for name, expr in v.iteritems():
+                    try:
+                        rv[name] = re.compile(expr)
+                    except Exception, e:
+                        print("Invalid expression '%s' for key '%s' in 'if_matches': %s" % (expr, name, e))
+                        continue
+                return rv
+        return {}
+
+    @property
     def prepend_value(self):
         return self._value.get('prepend', False) if isinstance(self._value, dict) else False
     
@@ -223,7 +238,6 @@ class Variable(object):
         self.dependencies = []
         self.strict = False    # Do not inherit existing environment
         self.absolute = False  # Make path absolute
-        self.if_exists = False # Only add to existing variables
 
     def list_dependencies(self, value):
         """Checks the value to see if it has any dependency on other Variables, returning them in a list"""
@@ -261,8 +275,6 @@ class Variable(object):
             self.strict = value_wrapper.strict_value
         if not self.absolute:
             self.absolute = value_wrapper.absolute_value
-        if not self.if_exists:
-            self.if_exists = value_wrapper.if_exists
         v = value_wrapper.value
         if v is None:
             return
@@ -765,12 +777,25 @@ class Tool(object):
     
     def get_vars(self, env):
         for name, value in self.environment.items():
-            _value = value
+            _value = (value if isinstance(value, ValueWrapper) else ValueWrapper(value))
             if name not in env.variables:
-                _value = (value if isinstance(value, ValueWrapper) else ValueWrapper(value))
+                # Check if key has to be defined
                 if _value.if_exists:
                     continue
                 env.variables[name] = Variable(name)
+            # Check for key expressions
+            skip = False
+            for key, expr in _value.if_matches.iteritems():
+                try:
+                    if not expr.match(env.variables[key].get_env()):
+                        skip = True
+                        break
+                except Exception, e:
+                    print("'if_matches' failed for key '%s': %s" % (key, e))
+                    skip = True
+                    break
+            if skip:
+                continue
             env.variables[name].append_value(_value, path=self.path, platform=platform.system().lower(), tool=self.tool, version=str(self.version))
         
         # check for optional parameters
@@ -784,12 +809,25 @@ class Tool(object):
                     break
             if foundall:
                 for name, value in optional_value.items():
-                    _value = value
+                    _value = (value if isinstance(value, ValueWrapper) else ValueWrapper(value))
                     if name not in env.variables:
-                        _value = (value if isinstance(value, ValueWrapper) else ValueWrapper(value))
+                        # Check if key has to be defined
                         if _value.if_exists:
                             continue
                         env.variables[name] = Variable(name)
+                    # Check for key expressions
+                    skip = False
+                    for key, expr in _value.if_matches.iteritems():
+                        try:
+                            if not expr.match(env.variables[key].get_env()):
+                                skip = True
+                                break
+                        except Exception, e:
+                            print("'if_matches' failed for key '%s': %s" % (key, e))
+                            skip = True
+                            break
+                    if skip:
+                        continue
                     env.variables[name].append_value(_value, path=self.path, platform=platform.system().lower(), tool=self.tool, version=str(self.version))
 
 
