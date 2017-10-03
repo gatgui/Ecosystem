@@ -274,6 +274,10 @@ class Variable(object):
             else:
                 ev = [v]
             for v in ev:
+                if v is None:
+                    # Skip values set to None explicitely
+                    # This stills allow empty values
+                    continue
                 if v not in self.values:
                     if prepend:
                         self.values.insert(0, v)
