@@ -195,6 +195,12 @@ class ValueWrapper(object):
         return False
 
     @property
+    def if_exists(self):
+        if isinstance(self._value, dict):
+            return self._value.get('if_exists', False)
+        return False
+
+    @property
     def prepend_value(self):
         return self._value.get('prepend', False) if isinstance(self._value, dict) else False
     
@@ -217,6 +223,7 @@ class Variable(object):
         self.dependencies = []
         self.strict = False    # Do not inherit existing environment
         self.absolute = False  # Make path absolute
+        self.if_exists = False # Only add to existing variables
 
     def list_dependencies(self, value):
         """Checks the value to see if it has any dependency on other Variables, returning them in a list"""
@@ -242,8 +249,11 @@ class Variable(object):
             # ValueExpr is already a value wrapper
             value_wrapper = value
             is_expr = True
+        elif isinstance(value, ValueWrapper):
+            value_wrapper = value
         else:
             value_wrapper = ValueWrapper(value)
+            
         # Strict and absolute merge logic:
         #   If any of the appended value is strict, all are strict
         #   If any of the appended value is absolute, all are absolute
@@ -251,6 +261,8 @@ class Variable(object):
             self.strict = value_wrapper.strict_value
         if not self.absolute:
             self.absolute = value_wrapper.absolute_value
+        if not self.if_exists:
+            self.if_exists = value_wrapper.if_exists
         v = value_wrapper.value
         if v is None:
             return
@@ -753,9 +765,13 @@ class Tool(object):
     
     def get_vars(self, env):
         for name, value in self.environment.items():
+            _value = value
             if name not in env.variables:
+                _value = (value if isinstance(value, ValueWrapper) else ValueWrapper(value))
+                if _value.if_exists:
+                    continue
                 env.variables[name] = Variable(name)
-            env.variables[name].append_value(value, path=self.path, platform=platform.system().lower(), tool=self.tool, version=str(self.version))
+            env.variables[name].append_value(_value, path=self.path, platform=platform.system().lower(), tool=self.tool, version=str(self.version))
         
         # check for optional parameters
         for optional_names, optional_value in self.optional.items(): 
@@ -768,9 +784,13 @@ class Tool(object):
                     break
             if foundall:
                 for name, value in optional_value.items():
+                    _value = value
                     if name not in env.variables:
+                        _value = (value if isinstance(value, ValueWrapper) else ValueWrapper(value))
+                        if _value.if_exists:
+                            continue
                         env.variables[name] = Variable(name)
-                    env.variables[name].append_value(value, path=self.path, platform=platform.system().lower(), tool=self.tool, version=str(self.version))
+                    env.variables[name].append_value(_value, path=self.path, platform=platform.system().lower(), tool=self.tool, version=str(self.version))
 
 
 def list_tools(verbose=False):
