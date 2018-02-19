@@ -1,0 +1,13 @@
+#!/usr/bin/env sh
+
+`dirname $0`/eco "$@" -s > eco.out
+
+WD="'`pwd`'";
+COMMAND="cd $WD; source eco.out"
+
+osascript 2>/dev/null <<EOF
+    tell application "Terminal"
+        activate
+        do script with command "$COMMAND $EXIT"
+    end tell
+EOF
