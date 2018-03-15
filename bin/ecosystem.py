@@ -553,7 +553,7 @@ class Version(object):
 
 
 class Requirement(object):
-    def __init__(self, s=None):
+    def __init__(self, s=None, available_tools=None):
         super(Requirement, self).__init__()
         
         self.name = None
@@ -564,6 +564,10 @@ class Requirement(object):
         self.lower_strict = False
         
         if s is not None:
+            if available_tools is not None and s in available_tools:
+                self.name = s
+                return
+
             restriction = 0
             if s.endswith("+"):
                 restriction = 1
@@ -605,7 +609,7 @@ class Requirement(object):
                         self.name = m.group(1)
                         vs = m.group(2)
                         if vs:
-                            self.fix = Version(vs)
+                           self.fix = Version(vs)
                     else:
                         self.name = s
             
@@ -757,11 +761,9 @@ class Tool(object):
                 # 'tools', 'platforms' have to be defined 
                 self.tool = in_dictionary['tool']
                 self.platforms = in_dictionary['platforms']
-                self.requirements = []
                 # 'version', 'environment', 'optional' and 'requires' may be empty or undefined
+                self.requirements = in_dictionary.get('requires', [])
                 self.version = Version(in_dictionary.get('version', ''))
-                for req in in_dictionary.get('requires', []):
-                    self.requirements.append(Requirement(req))
                 self.environment = in_dictionary.get('environment', {})
                 self.optional = in_dictionary.get('optional', {})
         except IOError:
@@ -770,6 +772,12 @@ class Tool(object):
             sys.stderr.write('Failed to read tool environment: %s\n' % filename)
             raise e
     
+    def parse_requirements(self, available_tools):
+        newreqs = []
+        for req in self.requirements:
+            newreqs.append(Requirement(req, available_tools=available_tools))
+        self.requirements = newreqs
+
     @property
     def platform_supported(self):
         """Check to see if the tool is supported on the current platform"""
@@ -858,7 +866,13 @@ def list_tools(verbose=False):
                     if verbose:
                         sys.stderr.write("    Already processed\n")
 
-    return [Tool(file_path) for file_path in environment_files]
+    all_tools = [Tool(file_path) for file_path in environment_files]
+
+    all_names = set([t.tool for t in all_tools])
+    for t in all_tools:
+        t.parse_requirements(all_names)
+
+    return all_tools
 
 
 def list_available_tools(verbose=False):
@@ -875,14 +889,16 @@ class Environment(object):
         self.success = True
         self.force = force
 
+        possible_tools = list_tools(verbose)
+        available_tool_names = set([t.tool for t in possible_tools])
+
         for want in wants:
-            req = Requirement(want)
+            req = Requirement(want, available_tools=available_tool_names)
             creq = self.wants.get(req.name, req)
             if creq != req and not creq.merge(req, in_place=True):
                 raise Exception("Invalid wants")
             self.wants[req.name] = creq
 
-        possible_tools = list_tools(verbose)
         versions = {}  # tool name -> Requirement
 
         versioned_tools = {}
