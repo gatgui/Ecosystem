@@ -15,9 +15,15 @@ Environment
       (http://semver.org/spec/v2.0.0.html)
    - Allow simultaneous usage of 'strict' and 'abs' in environment keys
    - Add new 'prepend' boolean option to environment keys
+   - Add new 'if_exists' boolean option. When true, values are meeged into the environment
+      only if the variable already exists rather than creating a new one
+   - Add new 'if_matches' dict option. Key are variable names and values are regular expressions
+      that will be run against their respective keys environment variable expanded value.
+      If there's no match, values won't be appended to the environment. All expressions must match
+      for the values to be appended
    - Allow usage of python eval in key values:
       Example: "HOUDINI_MAJOR_RELEASE": eval('"@version".split(".")[0]'),
-   - Support , separated notation in optionals ('&&' logic)
+   - Support , separated notation in optionals (and logic)
    - Less picky about missing keys at environment top level (only 'tool' and 'platforms' are mandatory)
    - Allow usage of '/' to separate tool name from version in requirements
       (usefull for libraries whose names end with a number like xml2, hdf5)
