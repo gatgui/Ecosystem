@@ -167,8 +167,8 @@ class ValueWrapper(object):
         if isinstance(self._value, dict):
             v1 = self._value.get(self._current_os, None)
             if v1:
-                # merge platform specific and common value only if 'strict' is False
-                if not self._value.get('strict', False):
+                # merge platform specific and common value only if 'single' is False
+                if not self._value.get('single', False):
                     v2 = self._value.get("common", None)
                     if v2:
                         v1 = ([v1] if not isinstance(v1, list) else v1)
@@ -184,8 +184,22 @@ class ValueWrapper(object):
             return self._value
 
     @property
+    def priority(self):
+        return self._value.get('priority', 0) if isinstance(self._value, dict) else 0
+
+    @property
+    def single_value(self):
+        return self._value.get('single', False) if isinstance(self._value, dict) else False
+
+    @property
     def strict_value(self):
-        return self._value.get('strict', False) if isinstance(self._value, dict) else False
+        if isinstance(self._value, dict):
+            if self._value.get('single', False):
+                return True
+            else:
+                return self._value.get('strict', False)
+        else:
+            return False
 
     @property
     def absolute_value(self):
@@ -238,6 +252,7 @@ class Variable(object):
         self.dependencies = []
         self.strict = False    # Do not inherit existing environment
         self.absolute = False  # Make path absolute
+        self.single = False    # Allow a single value, implies strict, use priority in case of conflict
 
     def list_dependencies(self, value):
         """Checks the value to see if it has any dependency on other Variables, returning them in a list"""
@@ -267,21 +282,64 @@ class Variable(object):
             value_wrapper = value
         else:
             value_wrapper = ValueWrapper(value)
-            
-        # Strict and absolute merge logic:
+
+        # Variable properties merging logic:
+        #   If any of the appended value is single, all are single
+        #   When a variable becomes single, the highest priority value is kept
+        #     If all the values are of the same priority, it will be the first one
         #   If any of the appended value is strict, all are strict
         #   If any of the appended value is absolute, all are absolute
-        if not self.strict:
+        if not self.single:
+            self.single = value_wrapper.single_value
+            if self.single:
+                # value wasn't single so far, reduce to a single value
+                # based on prioriry if necessary
+                if len(self.values) > 1:
+                    sv = None
+                    sp = None
+                    removed = []
+                    for v, p in self.values:
+                        if sv is None:
+                            sv, sp = (v, p)
+                        elif p > sp:
+                            removed.append(sv)
+                            sv, sp = (v, p)
+                        else:
+                            removed.append(v)
+                    sys.stderr.write("WARNING: Reducing variable '%s' value to '%s'. Removed value(s):\n" % (self.name, sv))
+                    for rv in removed:
+                        sys.stderr.write("WARNING:   %s\n" % rv)
+                    self.values = [(sv, sp)]
+                self.strict = True
+        elif not self.strict:
             self.strict = value_wrapper.strict_value
         if not self.absolute:
             self.absolute = value_wrapper.absolute_value
+
+        p = value_wrapper.priority
         v = value_wrapper.value
         if v is None:
             return
         vl = ([v] if not isinstance(v, list) else v)
+
         prepend = value_wrapper.prepend_value
-        if prepend:
+        if prepend and not self.single:
+            # as each element is prepended reverse array to preserve order
+            # if key is a single value, don't do it as loop will exit on first
+            # processed element
             vl.reverse()
+
+        if self.single and vl:
+            if len(self.values) == 1 and self.values[0][1] > p:
+                sys.stderr.write("WARNING: Variable '%s' is single valued. Discarding lower priority value(s):\n" % self.name)
+                for v in vl:
+                    sys.stderr.write("WARNING:   %s\n" % v)
+                vl = []
+            elif len(vl) > 1:
+                sys.stderr.write("WARNING: Variable '%s' is single valued. Discarding appended value(s):\n" % self.name)
+                for v in vl[1:]:
+                    sys.stderr.write("WARNING:   %s\n" % v)
+
         for v in vl:
             _is_expr = isinstance(v, ValueExpr)
             v = self.substitute_at(v.value if _is_expr else v, **subst_keys)
@@ -297,19 +355,41 @@ class Variable(object):
                     continue
             else:
                 ev = [v]
+            # Filter out values set to None explicitely, still allowing empty values
+            ev = filter(lambda x: x is not None, ev)
+            if len(ev) == 0:
+                continue
+
+            if self.single:
+                if len(ev) > 1:
+                    sys.stderr.write("WARNING: Variable '%s' is single valued. Discarding value(s):\n" % self.name)
+                    for dv in ev[1:]:
+                        sys.stderr.write("WARNING:   %s\n" % dv)
+                ev = ev[0]
+                if len(self.values) == 0 or p > self.values[0][1]:
+                    self.values = [(ev, p)]
+                else:
+                    sys.stderr.write("WARNING: Variable '%s' is single valued. Discard lower priority value %s\n" % (self.name, ev))
+                break
+
             for v in ev:
-                if v is None:
-                    # Skip values set to None explicitely
-                    # This stills allow empty values
-                    continue
-                if v not in self.values:
+                found = -1
+                for vidx in xrange(len(self.values)):
+                    if v == self.values[vidx][0]:
+                        found = vidx
+                        break
+                if found == -1:
                     if prepend:
-                        self.values.insert(0, v)
+                        self.values.insert(0, (v, p))
                     else:
-                        self.values.append(v)
+                        self.values.append((v, p))
                     for var_dependency in self.list_dependencies(v):
                         if not var_dependency in self.dependencies:
                             self.dependencies.append(var_dependency)
+                else:
+                    # update priority
+                    fv, fp = self.values[found]
+                    self.values[found] = (fv, max(fp, p))
 
     def has_value(self):
         if len(self.values) > 0:
@@ -319,7 +399,8 @@ class Variable(object):
     def get_env(self, escape=False):
         value = ''
         unique_values = set()
-        for var_value in self.values:
+        prio_values = [y[0] for y in sorted(self.values, key=lambda x: x[1], reverse=True)]
+        for var_value in prio_values:
             # Do not make path absolute if it starts with a environment variable reference
             if self.absolute and not var_value.startswith("${"):
                 pathpat = os.path.abspath(ENV_REF_EXP.sub("*", var_value)).replace("\\", "/")

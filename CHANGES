@@ -15,6 +15,10 @@ Environment
       (http://semver.org/spec/v2.0.0.html)
    - Allow simultaneous usage of 'strict' and 'abs' in environment keys
    - Add new 'prepend' boolean option to environment keys
+   - Add new 'single' boolean option. 'single' implies 'strict'
+   - Add new 'priority' integer attribute. 0 by default, it will be taken into account when 
+      building final path list for multi valued variables or to decide of the final value
+      for single valued variables.
    - Add new 'if_exists' boolean option. When true, values are meeged into the environment
       only if the variable already exists rather than creating a new one
    - Add new 'if_matches' dict option. Key are variable names and values are regular expressions
