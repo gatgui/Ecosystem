@@ -1257,7 +1257,7 @@ Example:
 
     if args.listtools:
         for tool in list_available_tools(args.verbose):
-            print tool
+            print(tool)
         return 0
 
     tools = args.tools.split(',') if args.tools is not None else []
@@ -1284,7 +1284,7 @@ Example:
                             open('CMakeCache.txt')
                             os.remove('CMakeCache.txt')
                         except IOError:
-                            print "Cache doesn't exist..."
+                            print("Cache doesn't exist...")
 
                     call_process(['cmake', '-DCMAKE_BUILD_TYPE={0}'.format(build_type), '-G', MAKE_TARGET, '..'])
 
@@ -1308,7 +1308,7 @@ Example:
             if env.success:
                 output = env.get_env(set_environment=False)
                 if output:
-                    print output
+                    print(output)
             else:
                 return 1
         return 0
