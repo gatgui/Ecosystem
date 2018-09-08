@@ -1270,10 +1270,7 @@ class Environment(object):
 
 
 def call_process(arguments):
-    if type(arguments) in (unicode, str):
-        subprocess.call(arguments, shell=True)
-    else:
-        subprocess.call(arguments)
+    subprocess.call(arguments, shell=True)
 
 
 def main(argv=None):
